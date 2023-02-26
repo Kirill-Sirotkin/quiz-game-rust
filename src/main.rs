@@ -1,12 +1,12 @@
 use crossbeam_queue::SegQueue;
 use log::{info, warn};
-use quiz_game_rust::command::{Command, TextCommand};
+use quiz_game_rust::command::Command;
 use quiz_game_rust::logger::init_logger;
 use serde::{Deserialize, Serialize};
-use std::io::Error;
 use std::net::{TcpListener, TcpStream};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::spawn;
+use std::time::Duration;
 use tungstenite::accept;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -24,70 +24,63 @@ fn main() {
 
     let server = TcpListener::bind("127.0.0.1:9001").unwrap();
     for stream in server.incoming() {
-        make_threads(&mut queues_array, stream);
+        make_threads(&mut queues_array, stream.unwrap());
+        info!("array: {}", queues_array.len());
     }
 }
 
-fn make_threads(v: &mut Vec<Arc<SegQueue<Box<&impl Command>>>>, stream: Result<TcpStream, Error>) {
-    let queue_original: Arc<SegQueue<Box<&impl Command>>> = Arc::new(SegQueue::new());
+fn make_threads(v: &mut Vec<Arc<SegQueue<Command>>>, stream_param: TcpStream) {
+    let queue_original: Arc<SegQueue<Command>> = Arc::new(SegQueue::new());
+    let queue_msgs_original: Arc<SegQueue<tungstenite::Message>> = Arc::new(SegQueue::new());
+    let mut websocket = accept(stream_param).unwrap();
     v.push(queue_original.clone());
 
     let queue = queue_original.clone();
-    spawn(move || {
-        let mut websocket = accept(stream.unwrap()).unwrap();
-        warn!("t1 start");
-        loop {
-            while let Some(i) = queue.pop() {
-                // info!("{}", i);
-                i.default_action(websocket);
+    let queue_msgs = queue_msgs_original.clone();
+    let queues_list = v.clone();
+    // spawn(move || {
+    //     warn!("t1 start");
+    //     loop {
+    //         while let Some(i) = queue.pop() {
+    //             // info!("{}", i);
+    //             match i {
+    //                 Command::SendMessage { text } => {
+    //                     queue_msgs.push(tungstenite::Message::Text(String::from(text)));
+    //                 }
+    //                 Command::Disconnect {} => {
+    //                     queue_msgs.push(tungstenite::Message::Text(String::from("Disconnected")))
+    //                 }
+    //             }
+    //         }
+    //     }
+    // });
+    let queue = queue_original.clone();
+    let queue_msgs = queue_msgs_original.clone();
+    spawn(move || loop {
+        // while let Some(i) = queue_msgs.pop() {
+        //     websocket.write_message(i).unwrap();
+        // }
+        while let Some(i) = queue.pop() {
+            match i {
+                Command::SendMessage { text } => {
+                    websocket
+                        .write_message(tungstenite::Message::Text(text.to_string()))
+                        .unwrap();
+                }
+                Command::Disconnect {} => {
+                    websocket
+                        .write_message(tungstenite::Message::Text("Disconnect!".to_string()))
+                        .unwrap();
+                }
             }
         }
-    });
-    let queue = queue_original.clone();
-    spawn(move || {
-        warn!("t2 start");
-        for i in 1..100 {
-            //queue.push(i);
+        let msg = websocket.read_message().unwrap();
+
+        let parsed_msg: Result<Command, serde_json::Error> = serde_json::from_str(&msg.to_string());
+        match parsed_msg {
+            Ok(msg) => queue.push(msg),
+            Err(error) => warn!("Command parse error: {}", error),
         }
-    });
-    let mut queue_list = v.clone();
-    spawn(move || {
-        let mut websocket = accept(stream.unwrap()).unwrap();
-
-        loop {
-            let msg = websocket.read_message().unwrap();
-
-            let user_info: Result<User, _> = serde_json::from_str(&msg.to_string());
-            let text_command: Result<Option<TextCommand>, _> =
-                serde_json::from_str(&msg.to_string());
-
-            match user_info {
-                Ok(res) => {
-                    info!("user OK");
-                }
-                Err(error) => {
-                    warn!("User none! {}", error);
-                }
-            };
-
-            match text_command {
-                Ok(res) => {
-                    info!("text command OK");
-                    // let text = res.as_ref().unwrap().command_text.parse().unwrap();
-                    for i in queue_list.iter_mut() {
-                        i.push(Box::new(res.unwrap()));
-                    }
-                    res
-                }
-                Err(error) => {
-                    warn!("text command none! {}", error);
-                    None
-                }
-            };
-
-            // if msg.is_binary() || msg.is_text() {
-            //     websocket.write_message(msg).unwrap();
-            // }
-        }
+        //std::thread::sleep(Duration::from_millis(50));
     });
 }

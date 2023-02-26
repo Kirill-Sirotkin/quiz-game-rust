@@ -26,24 +26,11 @@ pub mod logger {
 }
 
 pub mod command {
-    use std::net::TcpStream;
-
     use serde::{Deserialize, Serialize};
-    use tungstenite::{Message, WebSocket};
 
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct TextCommand {
-        pub command_text: String,
-    }
-    impl Command for TextCommand {
-        fn default_action(&self, mut websocket: WebSocket<TcpStream>) {
-            let message = Message::text(self.command_text.to_owned());
-            websocket.write_message(message).unwrap();
-            //info!("{}", logtext);
-        }
-    }
-
-    pub trait Command {
-        fn default_action(&self, websocket: WebSocket<TcpStream>);
+    #[derive(Serialize, Deserialize)]
+    pub enum Command {
+        SendMessage { text: String },
+        Disconnect {},
     }
 }
