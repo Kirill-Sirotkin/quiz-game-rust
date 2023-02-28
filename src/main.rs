@@ -1,12 +1,11 @@
 use crossbeam_queue::SegQueue;
-use log::{info, warn};
+use log::warn;
 use quiz_game_rust::command::Command;
 use quiz_game_rust::logger::init_logger;
 use serde::{Deserialize, Serialize};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
-use std::time::Duration;
 use tungstenite::accept;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -38,15 +37,20 @@ fn make_threads(
     queue_original: Arc<SegQueue<Command>>,
     stream_param: TcpStream,
 ) {
-    // let queue_original: Arc<SegQueue<Command>> = Arc::new(SegQueue::new());
-    let mut websocket = accept(stream_param).unwrap();
-    // let mut g = v.lock().unwrap();
-    // g.push(queue_original.clone());
-    // drop(g);
+    let mut websocket_result = accept(stream_param);
+    match websocket_result {
+        Ok(_) => (),
+        Err(err) => {
+            warn!("WS Err: {}", err);
+            return;
+        }
+    };
 
     let queue = queue_original.clone();
     let queues_list = v.clone();
     spawn(move || loop {
+        let websocket = websocket_result.as_mut().unwrap();
+        websocket.get_ref().set_nonblocking(true).expect("fail");
         while let Some(i) = queue.pop() {
             match i {
                 Command::SendMessage { text } => {
@@ -69,12 +73,17 @@ fn make_threads(
                 }
             }
         }
-        let msg = websocket.read_message().unwrap();
-
-        let parsed_msg: Result<Command, serde_json::Error> = serde_json::from_str(&msg.to_string());
-        match parsed_msg {
-            Ok(msg) => queue.push(msg),
-            Err(error) => warn!("Command parse error: {}", error),
+        let msg = websocket.read_message();
+        match msg {
+            Ok(msg) => {
+                let parsed_msg: Result<Command, serde_json::Error> =
+                    serde_json::from_str(&msg.to_string());
+                match parsed_msg {
+                    Ok(msg) => queue.push(msg),
+                    Err(error) => warn!("Command parse error: {}", error),
+                }
+            }
+            Err(_) => (),
         }
     });
 }
