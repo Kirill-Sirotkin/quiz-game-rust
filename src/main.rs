@@ -20,46 +20,33 @@ fn main() {
     init_logger().unwrap();
     warn!("success");
 
-    let mut queues_array = Vec::new();
+    let queues_array = Arc::new(Mutex::new(Vec::new()));
 
     let server = TcpListener::bind("127.0.0.1:9001").unwrap();
     for stream in server.incoming() {
-        make_threads(&mut queues_array, stream.unwrap());
-        info!("array: {}", queues_array.len());
+        let queue_stream: Arc<SegQueue<Command>> = Arc::new(SegQueue::new());
+        let mut g = queues_array.lock().unwrap();
+        g.push(queue_stream.clone());
+        drop(g);
+        make_threads(&mut queues_array.clone(), queue_stream, stream.unwrap());
+        //info!("array: {}", queues_array.len());
     }
 }
 
-fn make_threads(v: &mut Vec<Arc<SegQueue<Command>>>, stream_param: TcpStream) {
-    let queue_original: Arc<SegQueue<Command>> = Arc::new(SegQueue::new());
-    let queue_msgs_original: Arc<SegQueue<tungstenite::Message>> = Arc::new(SegQueue::new());
+fn make_threads(
+    v: &mut Arc<Mutex<Vec<Arc<SegQueue<Command>>>>>,
+    queue_original: Arc<SegQueue<Command>>,
+    stream_param: TcpStream,
+) {
+    // let queue_original: Arc<SegQueue<Command>> = Arc::new(SegQueue::new());
     let mut websocket = accept(stream_param).unwrap();
-    v.push(queue_original.clone());
+    // let mut g = v.lock().unwrap();
+    // g.push(queue_original.clone());
+    // drop(g);
 
     let queue = queue_original.clone();
-    let queue_msgs = queue_msgs_original.clone();
     let queues_list = v.clone();
-    // spawn(move || {
-    //     warn!("t1 start");
-    //     loop {
-    //         while let Some(i) = queue.pop() {
-    //             // info!("{}", i);
-    //             match i {
-    //                 Command::SendMessage { text } => {
-    //                     queue_msgs.push(tungstenite::Message::Text(String::from(text)));
-    //                 }
-    //                 Command::Disconnect {} => {
-    //                     queue_msgs.push(tungstenite::Message::Text(String::from("Disconnected")))
-    //                 }
-    //             }
-    //         }
-    //     }
-    // });
-    let queue = queue_original.clone();
-    let queue_msgs = queue_msgs_original.clone();
     spawn(move || loop {
-        // while let Some(i) = queue_msgs.pop() {
-        //     websocket.write_message(i).unwrap();
-        // }
         while let Some(i) = queue.pop() {
             match i {
                 Command::SendMessage { text } => {
@@ -72,6 +59,14 @@ fn make_threads(v: &mut Vec<Arc<SegQueue<Command>>>, stream_param: TcpStream) {
                         .write_message(tungstenite::Message::Text("Disconnect!".to_string()))
                         .unwrap();
                 }
+                Command::BroadcastMessage { text } => {
+                    let g = queues_list.lock().unwrap();
+                    for i in g.iter() {
+                        i.push(Command::SendMessage { text: text.clone() })
+                    }
+                    warn!("list: {}", g.len());
+                    drop(g);
+                }
             }
         }
         let msg = websocket.read_message().unwrap();
@@ -81,6 +76,5 @@ fn make_threads(v: &mut Vec<Arc<SegQueue<Command>>>, stream_param: TcpStream) {
             Ok(msg) => queue.push(msg),
             Err(error) => warn!("Command parse error: {}", error),
         }
-        //std::thread::sleep(Duration::from_millis(50));
     });
 }

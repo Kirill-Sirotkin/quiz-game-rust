@@ -32,5 +32,6 @@ pub mod command {
     pub enum Command {
         SendMessage { text: String },
         Disconnect {},
+        BroadcastMessage { text: String },
     }
 }
