@@ -50,6 +50,11 @@ fn make_threads(
     let queues_list = v.clone();
     spawn(move || loop {
         let websocket = websocket_result.as_mut().unwrap();
+        if !websocket.can_read() {
+            warn!("socket closed!");
+            break;
+        }
+
         websocket.get_ref().set_nonblocking(true).expect("fail");
         while let Some(i) = queue.pop() {
             match i {
