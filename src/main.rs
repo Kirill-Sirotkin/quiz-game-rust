@@ -1,94 +1,49 @@
 use crossbeam_queue::SegQueue;
-use log::warn;
+use futures_util::{
+    future::{self, ok},
+    stream::Forward,
+    StreamExt, TryStreamExt,
+};
+use log::{info, warn};
 use quiz_game_rust::command::Command;
 use quiz_game_rust::logger::init_logger;
 use serde::{Deserialize, Serialize};
-use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
-use std::thread::spawn;
-use tungstenite::accept;
+use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::*;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct User {
-    username: String,
-    age: i32,
-    email: String,
-}
-
-fn main() {
+#[tokio::main]
+async fn main() {
     init_logger().unwrap();
-    warn!("success");
+    info!("Server started");
 
-    let queues_array = Arc::new(Mutex::new(Vec::new()));
+    //let queues_array = Arc::new(Mutex::new(Vec::new()));
 
-    let server = TcpListener::bind("127.0.0.1:9001").unwrap();
-    for stream in server.incoming() {
-        let queue_stream: Arc<SegQueue<Command>> = Arc::new(SegQueue::new());
-        let mut g = queues_array.lock().unwrap();
-        g.push(queue_stream.clone());
-        drop(g);
-        make_threads(&mut queues_array.clone(), queue_stream, stream.unwrap());
-        //info!("array: {}", queues_array.len());
+    let try_socket = TcpListener::bind("127.0.0.1:9001").await;
+    let listener = try_socket.expect("Failed to bind");
+    info!("Listening on: 127.0.0.1:9001");
+
+    while let Ok((stream, _)) = listener.accept().await {
+        tokio::spawn(make_threads(stream));
     }
 }
 
-fn make_threads(
-    v: &mut Arc<Mutex<Vec<Arc<SegQueue<Command>>>>>,
-    queue_original: Arc<SegQueue<Command>>,
-    stream_param: TcpStream,
-) {
-    let mut websocket_result = accept(stream_param);
-    match websocket_result {
-        Ok(_) => (),
-        Err(err) => {
-            warn!("WS Err: {}", err);
-            return;
-        }
-    };
+async fn make_threads(stream: TcpStream) {
+    let addr = stream
+        .peer_addr()
+        .expect("connected streams should have a peer address");
+    info!("Peer address: {}", addr);
 
-    let queue = queue_original.clone();
-    let queues_list = v.clone();
-    spawn(move || loop {
-        let websocket = websocket_result.as_mut().unwrap();
-        if !websocket.can_read() {
-            warn!("socket closed!");
-            break;
-        }
+    let ws_stream = tokio_tungstenite::accept_async(stream)
+        .await
+        .expect("Error during the websocket handshake occurred");
 
-        websocket.get_ref().set_nonblocking(true).expect("fail");
-        while let Some(i) = queue.pop() {
-            match i {
-                Command::SendMessage { text } => {
-                    websocket
-                        .write_message(tungstenite::Message::Text(text.to_string()))
-                        .unwrap();
-                }
-                Command::Disconnect {} => {
-                    websocket
-                        .write_message(tungstenite::Message::Text("Disconnect!".to_string()))
-                        .unwrap();
-                }
-                Command::BroadcastMessage { text } => {
-                    let g = queues_list.lock().unwrap();
-                    for i in g.iter() {
-                        i.push(Command::SendMessage { text: text.clone() })
-                    }
-                    warn!("list: {}", g.len());
-                    drop(g);
-                }
-            }
-        }
-        let msg = websocket.read_message();
-        match msg {
-            Ok(msg) => {
-                let parsed_msg: Result<Command, serde_json::Error> =
-                    serde_json::from_str(&msg.to_string());
-                match parsed_msg {
-                    Ok(msg) => queue.push(msg),
-                    Err(error) => warn!("Command parse error: {}", error),
-                }
-            }
-            Err(_) => (),
-        }
-    });
+    info!("New WebSocket connection: {}", addr);
+
+    let (write, mut read) = ws_stream.split();
+    // We should not forward messages other than text or binary.\
+    loop {
+        let msg = read.next().await.unwrap();
+        info!("New message!: {}", msg.unwrap());
+    }
 }
