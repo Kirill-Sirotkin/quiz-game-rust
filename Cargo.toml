@@ -14,3 +14,5 @@ crossbeam-queue = "0.3.8"
 tokio = {version = "1.26.0", features = ["full"]}
 tokio-tungstenite = "0.18.0"
 futures-util = "0.3.26"
+futures-channel = "0.3.26"
+tungstenite = "0.18.0"
