@@ -1,3 +1,0 @@
-fn makeThread() {
-    spawn(move || {});
-}

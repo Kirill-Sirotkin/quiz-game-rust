@@ -30,8 +30,36 @@ pub mod command {
 
     #[derive(Serialize, Deserialize)]
     pub enum Command {
+        AddUser { name: String },
+        GetUsers {},
+        CreateRoom { name: String, max_players: i32 },
+        GetRooms {},
         SendMessage { text: String },
         Disconnect {},
         BroadcastMessage { text: String },
+    }
+
+    pub enum MessageType {
+        Broadcast,
+        Target,
+    }
+}
+
+pub mod quiz_game_backend_models {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize)]
+    pub struct User {
+        pub id: String,
+        pub name: String,
+        pub address: String,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Room {
+        pub id: String,
+        pub name: String,
+        pub max_players: i32,
+        pub host_id: String,
     }
 }

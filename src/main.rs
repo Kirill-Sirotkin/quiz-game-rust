@@ -1,7 +1,8 @@
 use crossbeam_queue::SegQueue;
 use log::{info, warn};
-use quiz_game_rust::command::Command;
 use quiz_game_rust::logger::init_logger;
+use quiz_game_rust::quiz_game_backend_models;
+use quiz_game_rust::{command::*, quiz_game_backend_models::*};
 use serde::de::Error;
 use std::{
     collections::HashMap,
@@ -10,6 +11,7 @@ use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
+use uuid::Uuid;
 
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
@@ -19,8 +21,16 @@ use tungstenite::protocol::Message;
 
 type Tx = UnboundedSender<Message>;
 type PeerMap = Arc<Mutex<HashMap<SocketAddr, Tx>>>;
+type UserList = Arc<Mutex<Vec<User>>>;
+type RoomList = Arc<Mutex<Vec<Room>>>;
 
-async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: SocketAddr) {
+async fn handle_connection(
+    peer_map: PeerMap,
+    user_list: UserList,
+    room_list: RoomList,
+    raw_stream: TcpStream,
+    addr: SocketAddr,
+) {
     println!("Incoming TCP connection from: {}", addr);
 
     let ws_stream = tokio_tungstenite::accept_async(raw_stream)
@@ -43,23 +53,9 @@ async fn handle_connection(peer_map: PeerMap, raw_stream: TcpStream, addr: Socke
             msg.to_text().unwrap()
         );
         match parse_command(&msg) {
-            Ok(command) => execute_command(&command, &peer_map, &addr),
+            Ok(command) => execute_command(&command, &peer_map, &user_list, &room_list, &addr),
             Err(error) => warn!("Error parsing command!: {}", error),
         }
-
-        // // Accept the message and send to sink
-        // // -----------------------------------------------------------------------------------------------------
-        // let peers = peer_map.lock().unwrap();
-
-        // // We want to broadcast the message to everyone except ourselves.
-        // let broadcast_recipients = peers
-        //     .iter()
-        //     .filter(|(peer_addr, _)| peer_addr != &&addr)
-        //     .map(|(_, ws_sink)| ws_sink);
-
-        // for recp in broadcast_recipients {
-        //     recp.unbounded_send(msg.clone()).unwrap();
-        // }
 
         future::ok(())
     });
@@ -83,7 +79,13 @@ fn parse_command(msg: &Message) -> Result<Command, serde_json::Error> {
     }
 }
 
-fn execute_command(command: &Command, peer_map: &PeerMap, addr: &SocketAddr) {
+fn execute_command(
+    command: &Command,
+    peer_map: &PeerMap,
+    user_list: &UserList,
+    room_list: &RoomList,
+    addr: &SocketAddr,
+) {
     match command {
         Command::SendMessage { text } => {
             info!("Send message: {}", text);
@@ -116,6 +118,71 @@ fn execute_command(command: &Command, peer_map: &PeerMap, addr: &SocketAddr) {
                     .unwrap();
             }
         }
+        Command::AddUser { name } => {
+            user_list.lock().unwrap().push(User {
+                id: Uuid::new_v4().to_string(),
+                name: name.to_string(),
+                address: addr.to_string(),
+            });
+        }
+        Command::GetUsers {} => {
+            let mut user_list_json = String::new();
+
+            let users = user_list.lock().unwrap();
+            let all_users = users.iter();
+            for user in all_users {
+                let user_serialized = serde_json::to_string(user).unwrap();
+                user_list_json.push_str(&user_serialized);
+            }
+
+            let peers = peer_map.lock().unwrap();
+
+            let broadcast_recipients = peers
+                .iter()
+                .filter(|(peer_addr, _)| peer_addr == &addr)
+                .map(|(_, ws_sink)| ws_sink);
+
+            for recp in broadcast_recipients {
+                recp.unbounded_send(Message::Text(user_list_json.to_string()))
+                    .unwrap();
+            }
+        }
+        Command::CreateRoom { name, max_players } => {
+            let users = user_list.lock().unwrap();
+            let host_user = users
+                .iter()
+                .find(|user| user.address == addr.to_string())
+                .unwrap();
+
+            room_list.lock().unwrap().push(Room {
+                id: Uuid::new_v4().to_string(),
+                name: name.to_string(),
+                max_players: *max_players,
+                host_id: host_user.id.clone(),
+            });
+        }
+        Command::GetRooms {} => {
+            let mut room_list_json = String::new();
+
+            let rooms = room_list.lock().unwrap();
+            let all_rooms = rooms.iter();
+            for room in all_rooms {
+                let room_serialized = serde_json::to_string(room).unwrap();
+                room_list_json.push_str(&room_serialized);
+            }
+
+            let peers = peer_map.lock().unwrap();
+
+            let broadcast_recipients = peers
+                .iter()
+                .filter(|(peer_addr, _)| peer_addr == &addr)
+                .map(|(_, ws_sink)| ws_sink);
+
+            for recp in broadcast_recipients {
+                recp.unbounded_send(Message::Text(room_list_json.to_string()))
+                    .unwrap();
+            }
+        }
     }
 }
 
@@ -133,9 +200,19 @@ async fn main() -> Result<(), IoError> {
     let listener = try_socket.expect("Failed to bind");
     println!("Listening on: {}", addr);
 
+    // User list and Room list
+    let users = UserList::new(Mutex::new(Vec::new()));
+    let rooms = RoomList::new(Mutex::new(Vec::new()));
+
     // Let's spawn the handling of each connection in a separate task.
     while let Ok((stream, addr)) = listener.accept().await {
-        tokio::spawn(handle_connection(state.clone(), stream, addr));
+        tokio::spawn(handle_connection(
+            state.clone(),
+            users.clone(),
+            rooms.clone(),
+            stream,
+            addr,
+        ));
     }
 
     Ok(())
