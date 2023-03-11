@@ -39,6 +39,13 @@ pub mod command {
         BroadcastMessage { text: String },
     }
 
+    #[derive(Serialize, Deserialize)]
+    pub struct CommandTokenPair {
+        #[serde(flatten)]
+        command: Command,
+        token: String,
+    }
+
     pub enum MessageType {
         Broadcast,
         Target,
