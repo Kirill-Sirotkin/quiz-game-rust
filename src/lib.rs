@@ -64,7 +64,7 @@ pub mod quiz_game_backend_models {
     pub enum Response {
         createRoomResponse { token: String, roomId: String },
         joinRoomResponse { token: String, userList: Vec<User> },
-        userListUpdated { userList: Vec<User> },
+        updateUserList { userList: Vec<User> },
         errorReponse { errorText: String },
     }
 

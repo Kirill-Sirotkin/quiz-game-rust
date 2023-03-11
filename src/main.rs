@@ -18,7 +18,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tungstenite::protocol::Message;
 
 type Tx = UnboundedSender<Message>;
-type PeerMap = Arc<Mutex<HashMap<SocketAddr, Tx>>>;
+type PeerMap = Arc<Mutex<HashMap<(SocketAddr, String), Tx>>>;
 type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 
@@ -29,16 +29,17 @@ async fn handle_connection(
     raw_stream: TcpStream,
     addr: SocketAddr,
 ) {
-    println!("Incoming TCP connection from: {}", addr);
+    let addr_id_pair = (addr, Uuid::new_v4().to_string());
+    println!("Incoming TCP connection from: {}", addr_id_pair.0);
 
     let ws_stream = tokio_tungstenite::accept_async(raw_stream)
         .await
         .expect("Error during the websocket handshake occurred");
-    println!("WebSocket connection established: {}", addr);
+    println!("WebSocket connection established: {}", addr_id_pair.0);
 
     // Insert the write part of this peer to the peer map.
     let (tx, rx) = unbounded();
-    peer_map.lock().unwrap().insert(addr, tx);
+    peer_map.lock().unwrap().insert(addr_id_pair.clone(), tx);
 
     let (outgoing, incoming) = ws_stream.split();
 
@@ -47,11 +48,13 @@ async fn handle_connection(
     let broadcast_incoming = incoming.try_for_each(|msg| {
         println!(
             "Received a message from {}: {}",
-            addr,
+            addr_id_pair.0,
             msg.to_text().unwrap()
         );
         match parse_command(&msg) {
-            Ok(command) => execute_command(&command, &peer_map, &user_list, &room_list, &addr),
+            Ok(command) => {
+                execute_command(&command, &peer_map, &user_list, &room_list, &addr_id_pair)
+            }
             Err(error) => warn!("Error parsing command!: {}", error),
         }
 
@@ -65,8 +68,8 @@ async fn handle_connection(
     pin_mut!(broadcast_incoming, receive_from_others);
     future::select(broadcast_incoming, receive_from_others).await;
 
-    println!("{} disconnected", &addr);
-    peer_map.lock().unwrap().remove(&addr);
+    println!("{} disconnected", &addr_id_pair.0);
+    peer_map.lock().unwrap().remove(&addr_id_pair);
 }
 
 fn parse_command(msg: &Message) -> Result<Command, serde_json::Error> {
@@ -82,12 +85,24 @@ fn execute_command(
     peer_map: &PeerMap,
     user_list: &UserList,
     room_list: &RoomList,
-    addr: &SocketAddr,
+    addr_id_pair: &(SocketAddr, String),
 ) {
+    let peers = peer_map.lock().unwrap();
+    let current_user_id = peers
+        .iter()
+        .find(|(peer_addr, _)| peer_addr == &addr_id_pair)
+        .unwrap()
+        .0
+         .1
+        .clone();
+    drop(peers);
+
     match command {
         Command::createRoom { name } => {
+            info!("Create Room request from: {}", &addr_id_pair.0);
+
             let new_user = User {
-                id: Uuid::new_v4().to_string(),
+                id: current_user_id,
                 name: name.to_string(),
             };
 
@@ -98,7 +113,7 @@ fn execute_command(
                     let response = Response::errorReponse {
                         errorText: error.to_string(),
                     };
-                    send_message(response, &peer_map, &addr);
+                    send_message(response, &peer_map, &addr_id_pair.0);
                     return;
                 }
             }
@@ -123,7 +138,7 @@ fn execute_command(
                     let response = Response::errorReponse {
                         errorText: error.to_string(),
                     };
-                    send_message(response, &peer_map, &addr);
+                    send_message(response, &peer_map, &addr_id_pair.0);
                     return;
                 }
             }
@@ -134,16 +149,17 @@ fn execute_command(
                     let response = Response::errorReponse {
                         errorText: error.to_string(),
                     };
-                    send_message(response, &peer_map, &addr);
+                    send_message(response, &peer_map, &addr_id_pair.0);
                     return;
                 }
             }
 
-            send_message(response, &peer_map, &addr);
+            send_message(response, &peer_map, &addr_id_pair.0);
+            info!("Successful room creation for: {}", &addr_id_pair.0);
         }
         Command::joinRoom { name, roomId } => {
             let new_user = User {
-                id: Uuid::new_v4().to_string(),
+                id: current_user_id,
                 name: name.to_string(),
             };
 
@@ -154,7 +170,7 @@ fn execute_command(
                     let response = Response::errorReponse {
                         errorText: error.to_string(),
                     };
-                    send_message(response, &peer_map, &addr);
+                    send_message(response, &peer_map, &addr_id_pair.0);
                     return;
                 }
             }
@@ -167,7 +183,7 @@ fn execute_command(
                     let response = Response::errorReponse {
                         errorText: "Room does not exist".to_string(),
                     };
-                    send_message(response, &peer_map, &addr);
+                    send_message(response, &peer_map, &addr_id_pair.0);
                     return;
                 }
             }
@@ -182,11 +198,18 @@ fn execute_command(
                 userList: user_list.clone(),
             };
 
-            send_message(response, &peer_map, &addr);
+            send_message(response, &peer_map, &addr_id_pair.0);
 
-            let broadcast_response = Response::userListUpdated {
+            let broadcast_response = Response::updateUserList {
                 userList: user_list.clone(),
             };
+
+            broadcast_message_room_except(
+                broadcast_response,
+                &peer_map,
+                &user_list,
+                &addr_id_pair.0,
+            );
         }
     }
 }
@@ -201,16 +224,21 @@ fn generate_token(id: &String) -> Result<String, jsonwebtoken::errors::Error> {
     return token;
 }
 fn send_message(response: Response, peer_map: &PeerMap, addr: &SocketAddr) {
+    info!("Sending msg to: {}", &addr);
+
     let peers = peer_map.lock().unwrap();
+    info!("Peers locked");
     let broadcast_recipients = peers
         .iter()
-        .filter(|(peer_addr, _)| peer_addr == &addr)
+        .filter(|(peer_addr, _)| &peer_addr.0 == addr)
         .map(|(_, ws_sink)| ws_sink);
 
+    info!("Recipients found, sending...");
     for recp in broadcast_recipients {
         recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
             .unwrap();
     }
+    info!("Message sent successfully to: {}", &addr);
 }
 fn broadcast_message_all(response: Response, peer_map: &PeerMap) {
     let peers = peer_map.lock().unwrap();
@@ -225,7 +253,46 @@ fn broadcast_message_except(response: Response, peer_map: &PeerMap, addr: &Socke
     let peers = peer_map.lock().unwrap();
     let broadcast_recipients = peers
         .iter()
-        .filter(|(peer_addr, _)| peer_addr != &addr)
+        .filter(|(peer_addr, _)| &peer_addr.0 != addr)
+        .map(|(_, ws_sink)| ws_sink);
+
+    for recp in broadcast_recipients {
+        recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
+            .unwrap();
+    }
+}
+fn broadcast_message_room_all(response: Response, peer_map: &PeerMap, user_list: &Vec<User>) {
+    let peers = peer_map.lock().unwrap();
+    let broadcast_recipients = peers
+        .iter()
+        .filter(|(peer_addr, _)| {
+            user_list
+                .iter()
+                .map(|user| &user.id)
+                .any(|id| id == &peer_addr.1)
+        })
+        .map(|(_, ws_sink)| ws_sink);
+
+    for recp in broadcast_recipients {
+        recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
+            .unwrap();
+    }
+}
+fn broadcast_message_room_except(
+    response: Response,
+    peer_map: &PeerMap,
+    user_list: &Vec<User>,
+    addr: &SocketAddr,
+) {
+    let peers = peer_map.lock().unwrap();
+    let broadcast_recipients = peers
+        .iter()
+        .filter(|(peer_addr, _)| {
+            user_list
+                .iter()
+                .map(|user| &user.id)
+                .any(|id| id == &peer_addr.1)
+        } && &peer_addr.0 != addr)
         .map(|(_, ws_sink)| ws_sink);
 
     for recp in broadcast_recipients {
