@@ -69,6 +69,14 @@ async fn handle_connection(
     future::select(broadcast_incoming, receive_from_others).await;
 
     println!("{} disconnected", &addr_id_pair.0);
+    let mut users = user_list.lock().unwrap();
+    match users.iter().position(|user| user.id == addr_id_pair.1) {
+        Some(index) => {
+            users.remove(index);
+            return;
+        }
+        None => (),
+    }
     peer_map.lock().unwrap().remove(&addr_id_pair);
 }
 
