@@ -30,13 +30,8 @@ pub mod command {
 
     #[derive(Serialize, Deserialize)]
     pub enum Command {
-        AddUser { name: String },
-        GetUsers {},
-        CreateRoom { name: String, max_players: i32 },
-        GetRooms {},
-        SendMessage { text: String },
-        Disconnect {},
-        BroadcastMessage { text: String },
+        createRoom { name: String },
+        joinRoom { name: String, roomId: String },
     }
 
     #[derive(Serialize, Deserialize)]
@@ -45,21 +40,15 @@ pub mod command {
         command: Command,
         token: String,
     }
-
-    pub enum MessageType {
-        Broadcast,
-        Target,
-    }
 }
 
 pub mod quiz_game_backend_models {
     use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, Clone)]
     pub struct User {
         pub id: String,
         pub name: String,
-        pub address: String,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -68,5 +57,19 @@ pub mod quiz_game_backend_models {
         pub name: String,
         pub max_players: i32,
         pub host_id: String,
+        pub user_list: Vec<User>,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub enum Response {
+        createRoomResponse { token: String, roomId: String },
+        joinRoomResponse { token: String, userList: Vec<User> },
+        userListUpdated { userList: Vec<User> },
+        errorReponse { errorText: String },
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Claims {
+        pub id: String,
     }
 }

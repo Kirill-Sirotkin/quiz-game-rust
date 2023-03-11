@@ -1,9 +1,7 @@
-use crossbeam_queue::SegQueue;
+use jsonwebtoken::{encode, EncodingKey, Header};
 use log::{info, warn};
 use quiz_game_rust::logger::init_logger;
-use quiz_game_rust::quiz_game_backend_models;
 use quiz_game_rust::{command::*, quiz_game_backend_models::*};
-use serde::de::Error;
 use std::{
     collections::HashMap,
     env,
@@ -87,102 +85,152 @@ fn execute_command(
     addr: &SocketAddr,
 ) {
     match command {
-        Command::SendMessage { text } => {
-            info!("Send message: {}", text);
-            let peers = peer_map.lock().unwrap();
-
-            let broadcast_recipients = peers
-                .iter()
-                .filter(|(peer_addr, _)| peer_addr == &addr)
-                .map(|(_, ws_sink)| ws_sink);
-
-            for recp in broadcast_recipients {
-                recp.unbounded_send(Message::Text(text.to_string()))
-                    .unwrap();
-            }
-        }
-        Command::Disconnect {} => {
-            info!("Disconnect message!");
-        }
-        Command::BroadcastMessage { text } => {
-            info!("Broadcast message: {}", text);
-            let peers = peer_map.lock().unwrap();
-
-            let broadcast_recipients = peers
-                .iter()
-                .filter(|(peer_addr, _)| peer_addr != &addr)
-                .map(|(_, ws_sink)| ws_sink);
-
-            for recp in broadcast_recipients {
-                recp.unbounded_send(Message::Text(text.to_string()))
-                    .unwrap();
-            }
-        }
-        Command::AddUser { name } => {
-            user_list.lock().unwrap().push(User {
+        Command::createRoom { name } => {
+            let new_user = User {
                 id: Uuid::new_v4().to_string(),
                 name: name.to_string(),
-                address: addr.to_string(),
-            });
-        }
-        Command::GetUsers {} => {
-            let mut user_list_json = String::new();
+            };
 
-            let users = user_list.lock().unwrap();
-            let all_users = users.iter();
-            for user in all_users {
-                let user_serialized = serde_json::to_string(user).unwrap();
-                user_list_json.push_str(&user_serialized);
+            let token = generate_token(&new_user.id);
+            match token {
+                Ok(_) => (),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr);
+                    return;
+                }
             }
 
-            let peers = peer_map.lock().unwrap();
-
-            let broadcast_recipients = peers
-                .iter()
-                .filter(|(peer_addr, _)| peer_addr == &addr)
-                .map(|(_, ws_sink)| ws_sink);
-
-            for recp in broadcast_recipients {
-                recp.unbounded_send(Message::Text(user_list_json.to_string()))
-                    .unwrap();
-            }
-        }
-        Command::CreateRoom { name, max_players } => {
-            let users = user_list.lock().unwrap();
-            let host_user = users
-                .iter()
-                .find(|user| user.address == addr.to_string())
-                .unwrap();
-
-            room_list.lock().unwrap().push(Room {
+            let mut new_room = Room {
                 id: Uuid::new_v4().to_string(),
                 name: name.to_string(),
-                max_players: *max_players,
-                host_id: host_user.id.clone(),
-            });
-        }
-        Command::GetRooms {} => {
-            let mut room_list_json = String::new();
+                max_players: 6,
+                host_id: new_user.id.clone(),
+                user_list: Vec::new(),
+            };
+            new_room.user_list.push(new_user.clone());
 
-            let rooms = room_list.lock().unwrap();
-            let all_rooms = rooms.iter();
-            for room in all_rooms {
-                let room_serialized = serde_json::to_string(room).unwrap();
-                room_list_json.push_str(&room_serialized);
+            let response = Response::createRoomResponse {
+                token: token.unwrap(),
+                roomId: new_room.id.clone(),
+            };
+
+            match user_list.lock() {
+                Ok(mut list) => list.push(new_user),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr);
+                    return;
+                }
             }
 
-            let peers = peer_map.lock().unwrap();
-
-            let broadcast_recipients = peers
-                .iter()
-                .filter(|(peer_addr, _)| peer_addr == &addr)
-                .map(|(_, ws_sink)| ws_sink);
-
-            for recp in broadcast_recipients {
-                recp.unbounded_send(Message::Text(room_list_json.to_string()))
-                    .unwrap();
+            match room_list.lock() {
+                Ok(mut list) => list.push(new_room),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr);
+                    return;
+                }
             }
+
+            send_message(response, &peer_map, &addr);
         }
+        Command::joinRoom { name, roomId } => {
+            let new_user = User {
+                id: Uuid::new_v4().to_string(),
+                name: name.to_string(),
+            };
+
+            let token = generate_token(&new_user.id);
+            match token {
+                Ok(_) => (),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr);
+                    return;
+                }
+            }
+
+            let mut rooms = room_list.lock().unwrap();
+            let room_index = rooms.iter().position(|room| &room.id == roomId);
+            match room_index {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "Room does not exist".to_string(),
+                    };
+                    send_message(response, &peer_map, &addr);
+                    return;
+                }
+            }
+            let target_room = rooms.get_mut(room_index.unwrap()).unwrap();
+
+            target_room.user_list.push(new_user);
+
+            let user_list = target_room.user_list.clone();
+
+            let response = Response::joinRoomResponse {
+                token: token.unwrap(),
+                userList: user_list.clone(),
+            };
+
+            send_message(response, &peer_map, &addr);
+
+            let broadcast_response = Response::userListUpdated {
+                userList: user_list.clone(),
+            };
+        }
+    }
+}
+
+fn generate_token(id: &String) -> Result<String, jsonwebtoken::errors::Error> {
+    let new_claims = Claims { id: id.clone() };
+    let token = encode(
+        &Header::default(),
+        &new_claims,
+        &EncodingKey::from_secret("secret".as_ref()),
+    );
+    return token;
+}
+fn send_message(response: Response, peer_map: &PeerMap, addr: &SocketAddr) {
+    let peers = peer_map.lock().unwrap();
+    let broadcast_recipients = peers
+        .iter()
+        .filter(|(peer_addr, _)| peer_addr == &addr)
+        .map(|(_, ws_sink)| ws_sink);
+
+    for recp in broadcast_recipients {
+        recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
+            .unwrap();
+    }
+}
+fn broadcast_message_all(response: Response, peer_map: &PeerMap) {
+    let peers = peer_map.lock().unwrap();
+    let broadcast_recipients = peers.iter().map(|(_, ws_sink)| ws_sink);
+
+    for recp in broadcast_recipients {
+        recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
+            .unwrap();
+    }
+}
+fn broadcast_message_except(response: Response, peer_map: &PeerMap, addr: &SocketAddr) {
+    let peers = peer_map.lock().unwrap();
+    let broadcast_recipients = peers
+        .iter()
+        .filter(|(peer_addr, _)| peer_addr != &addr)
+        .map(|(_, ws_sink)| ws_sink);
+
+    for recp in broadcast_recipients {
+        recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
+            .unwrap();
     }
 }
 
