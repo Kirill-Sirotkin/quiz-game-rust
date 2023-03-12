@@ -167,6 +167,8 @@ fn execute_command(
             info!("Successful room creation for: {}", &addr_id_pair.0);
         }
         Command::joinRoom { name, roomId } => {
+            info!("Join Room request from: {}", &addr_id_pair.0);
+
             let new_user = User {
                 id: current_user_id,
                 name: name.to_string(),
@@ -219,6 +221,11 @@ fn execute_command(
                 &user_list,
                 &addr_id_pair.0,
             );
+
+            info!("Successful room join for: {}", &addr_id_pair.0);
+        }
+        Command::heartbeat {} => {
+            info!("Heartbeat from: {}", &addr_id_pair.0);
         }
     }
 }

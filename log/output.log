@@ -1,8 +1,18 @@
 INFO - App started!
-INFO - Create Room request from: 127.0.0.1:58495
-INFO - Sending msg to: 127.0.0.1:58495
-INFO - Peers locked
-INFO - Recipients found, sending...
-INFO - Message sent successfully to: 127.0.0.1:58495
-INFO - Successful room creation for: 127.0.0.1:58495
-WARN - Error parsing command!: EOF while parsing a value at line 1 column 0
+INFO - Create Room request from: 127.0.0.1:53841
+INFO - Sending msg to: 127.0.0.1:53841
+INFO - Message sent successfully to: 127.0.0.1:53841
+INFO - Successful room creation for: 127.0.0.1:53841
+INFO - Join Room request from: 127.0.0.1:50659
+INFO - Sending msg to: 127.0.0.1:50659
+INFO - Message sent successfully to: 127.0.0.1:50659
+INFO - Sending broadcast to all room players except: 127.0.0.1:50659
+INFO - Broadcast sent successfully to all room players except: 127.0.0.1:50659
+INFO - Successful room join for: 127.0.0.1:50659
+ INFO - App started!
+utc INFO - App started!
+2023-03-12 20:20:15 INFO - App started!
+20:20:50 INFO - App started!
+20:23:56 INFO - App started!
+20:27:41 INFO - App started!
+20:28:00 INFO - App started!

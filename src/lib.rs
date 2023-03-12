@@ -26,15 +26,21 @@ pub mod logger {
 }
 
 pub mod file_logger {
+    use chrono;
     use log::{LevelFilter, SetLoggerError};
     use log4rs::append::file::FileAppender;
     use log4rs::config::{Appender, Config, Root};
     use log4rs::encode::pattern::PatternEncoder;
 
     pub fn init_file_logger() -> Result<(), SetLoggerError> {
+        let current_date = chrono::offset::Utc::now().date_naive().to_string();
+        let path = format!("log/{}.log", current_date);
+
         let logfile = FileAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{l} - {m}\n")))
-            .build("log/output.log");
+            .encoder(Box::new(PatternEncoder::new(
+                "{d(%H:%M:%S)(utc)} {l} - {m}\n",
+            )))
+            .build(path);
 
         let config = Config::builder()
             .appender(Appender::builder().build("logfile", Box::new(logfile.unwrap())))
@@ -53,6 +59,7 @@ pub mod command {
     pub enum Command {
         createRoom { name: String },
         joinRoom { name: String, roomId: String },
+        heartbeat {},
     }
 
     #[derive(Serialize, Deserialize)]
@@ -96,40 +103,29 @@ pub mod quiz_game_backend_models {
 }
 
 pub mod server_messages {
-    use crate::file_logger::{self, init_file_logger};
-    use crate::quiz_game_backend_models::{Response, Room, User};
+    use crate::quiz_game_backend_models::{Response, User};
+    use log::{info, warn};
     use std::{
         collections::HashMap,
-        env,
-        io::Error as IoError,
         net::SocketAddr,
         sync::{Arc, Mutex},
     };
 
-    use futures_channel::mpsc::{unbounded, UnboundedSender};
-    use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
-    use log::{info, warn};
-
-    use tokio::net::{TcpListener, TcpStream};
+    use futures_channel::mpsc::UnboundedSender;
     use tungstenite::protocol::Message;
 
     type Tx = UnboundedSender<Message>;
     type PeerMap = Arc<Mutex<HashMap<(SocketAddr, String), Tx>>>;
-    type UserList = Arc<Mutex<Vec<User>>>;
-    type RoomList = Arc<Mutex<Vec<Room>>>;
 
     pub fn send_message(response: Response, peer_map: &PeerMap, addr: &SocketAddr) {
-        // init_file_logger().unwrap();
         info!("Sending msg to: {}", &addr);
 
         let peers = peer_map.lock().unwrap();
-        info!("Peers locked");
         let broadcast_recipients = peers
             .iter()
             .filter(|(peer_addr, _)| &peer_addr.0 == addr)
             .map(|(_, ws_sink)| ws_sink);
 
-        info!("Recipients found, sending...");
         for recp in broadcast_recipients {
             recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
                 .unwrap();
@@ -137,6 +133,7 @@ pub mod server_messages {
         info!("Message sent successfully to: {}", &addr);
     }
     pub fn broadcast_message_all(response: Response, peer_map: &PeerMap) {
+        info!("Sending broadcast to all connections");
         let peers = peer_map.lock().unwrap();
         let broadcast_recipients = peers.iter().map(|(_, ws_sink)| ws_sink);
 
@@ -144,8 +141,10 @@ pub mod server_messages {
             recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
                 .unwrap();
         }
+        info!("Broadcast sent successfully to all connections");
     }
     pub fn broadcast_message_except(response: Response, peer_map: &PeerMap, addr: &SocketAddr) {
+        info!("Sending broadcast to all connections except: {}", &addr);
         let peers = peer_map.lock().unwrap();
         let broadcast_recipients = peers
             .iter()
@@ -156,12 +155,17 @@ pub mod server_messages {
             recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
                 .unwrap();
         }
+        info!(
+            "Broadcast sent successfully to all connections except: {}",
+            &addr
+        );
     }
     pub fn broadcast_message_room_all(
         response: Response,
         peer_map: &PeerMap,
         user_list: &Vec<User>,
     ) {
+        info!("Sending broadcast to all room players");
         let peers = peer_map.lock().unwrap();
         let broadcast_recipients = peers
             .iter()
@@ -177,6 +181,7 @@ pub mod server_messages {
             recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
                 .unwrap();
         }
+        info!("Broadcast sent successfully to all room players");
     }
     pub fn broadcast_message_room_except(
         response: Response,
@@ -184,6 +189,7 @@ pub mod server_messages {
         user_list: &Vec<User>,
         addr: &SocketAddr,
     ) {
+        info!("Sending broadcast to all room players except: {}", &addr);
         let peers = peer_map.lock().unwrap();
         let broadcast_recipients = peers
             .iter()
@@ -199,6 +205,10 @@ pub mod server_messages {
             recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
                 .unwrap();
         }
+        info!(
+            "Broadcast sent successfully to all room players except: {}",
+            &addr
+        );
     }
 }
 
