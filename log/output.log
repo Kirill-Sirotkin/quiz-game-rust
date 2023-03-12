@@ -1,0 +1,8 @@
+INFO - App started!
+INFO - Create Room request from: 127.0.0.1:58495
+INFO - Sending msg to: 127.0.0.1:58495
+INFO - Peers locked
+INFO - Recipients found, sending...
+INFO - Message sent successfully to: 127.0.0.1:58495
+INFO - Successful room creation for: 127.0.0.1:58495
+WARN - Error parsing command!: EOF while parsing a value at line 1 column 0
