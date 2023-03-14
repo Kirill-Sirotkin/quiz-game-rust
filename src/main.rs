@@ -1,6 +1,6 @@
 use log::{info, warn};
 use quiz_game_rust::file_logger::init_file_logger;
-use quiz_game_rust::jwtoken_generation::generate_token;
+use quiz_game_rust::jwtoken_generation::{decode_token, generate_token};
 use quiz_game_rust::server_messages::*;
 use quiz_game_rust::{backend_models::*, command::*};
 use std::{
@@ -115,9 +115,19 @@ fn execute_command(
                 name: name.to_string(),
                 avatarPath: "".to_string(),
                 roomId: "".to_string(),
+                isHost: true,
             };
 
-            let token = generate_token(&new_user.id);
+            let mut new_room = Room {
+                id: Uuid::new_v4().to_string(),
+                max_players: 6,
+                host_id: new_user.id.clone(),
+                user_list: Vec::new(),
+            };
+            new_user.roomId = new_room.id.clone();
+            new_room.user_list.push(new_user.clone());
+
+            let token = generate_token(&new_user.id, &new_room.id);
             match token {
                 Ok(_) => (),
                 Err(error) => {
@@ -128,15 +138,6 @@ fn execute_command(
                     return;
                 }
             }
-
-            let mut new_room = Room {
-                id: Uuid::new_v4().to_string(),
-                max_players: 6,
-                host_id: new_user.id.clone(),
-                user_list: Vec::new(),
-            };
-            new_user.roomId = new_room.id.clone();
-            new_room.user_list.push(new_user.clone());
 
             let response = Response::createRoomResponse {
                 token: token.unwrap(),
@@ -176,19 +177,8 @@ fn execute_command(
                 name: name.to_string(),
                 avatarPath: "".to_string(),
                 roomId: roomId.clone(),
+                isHost: false,
             };
-
-            let token = generate_token(&new_user.id);
-            match token {
-                Ok(_) => (),
-                Err(error) => {
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &peer_map, &addr_id_pair.0);
-                    return;
-                }
-            }
 
             let mut rooms = room_list.lock().unwrap();
             let room_index = rooms.iter().position(|room| &room.id == roomId);
@@ -204,9 +194,21 @@ fn execute_command(
             }
             let target_room = rooms.get_mut(room_index.unwrap()).unwrap();
 
-            target_room.user_list.push(new_user);
-
             let user_list = target_room.user_list.clone();
+
+            let token = generate_token(&new_user.id, &target_room.id);
+            match token {
+                Ok(_) => (),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+
+            target_room.user_list.push(new_user);
 
             let response = Response::joinRoomResponse {
                 token: token.unwrap(),
@@ -231,12 +233,77 @@ fn execute_command(
         Command::heartbeat {} => {
             info!("Heartbeat from: {}", &addr_id_pair.0);
         }
-        Command::startGame {} => {
+        Command::startGame { token } => {
             info!("Start game command from: {}", &addr_id_pair.0);
-        }
-        Command::getUserList { roomId } => {
+
+            let token_result = decode_token(token);
+            match token_result {
+                Ok(_) => (),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+            let token_info = token_result.unwrap().claims;
+
+            let users = user_list.lock().unwrap();
+            let user_index = users.iter().position(|user| user.id == token_info.id);
+            match user_index {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "User does not exist".to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+            let user = users.get(user_index.unwrap()).unwrap();
+            if !user.isHost {
+                let response = Response::errorReponse {
+                    errorText: "You are not the host".to_string(),
+                };
+                send_message(response, &peer_map, &addr_id_pair.0);
+            }
+
             let mut rooms = room_list.lock().unwrap();
-            let room_index = rooms.iter().position(|room| &room.id == roomId);
+            let room_index = rooms.iter().position(|room| room.id == token_info.roomId);
+            match room_index {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "Room does not exist".to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+            let target_room = rooms.get_mut(room_index.unwrap()).unwrap();
+
+            let broadcast_response = Response::startGame {};
+            broadcast_message_room_all(broadcast_response, peer_map, &target_room.user_list);
+        }
+        Command::getUserList { token } => {
+            info!("Get user list request from: {}", &addr_id_pair.0);
+
+            let token_result = decode_token(token);
+            match token_result {
+                Ok(_) => (),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+            let token_info = token_result.unwrap().claims;
+
+            let mut rooms = room_list.lock().unwrap();
+            let room_index = rooms.iter().position(|room| room.id == token_info.roomId);
             match room_index {
                 Some(_) => (),
                 None => {
@@ -256,14 +323,30 @@ fn execute_command(
             };
 
             send_message(response, peer_map, &addr_id_pair.0);
+            info!("Successful get user list from: {}", &addr_id_pair.0);
         }
-        Command::broadcastMessage { text, roomId } => {
+        Command::broadcastMessage { text, token } => {
+            info!("Broadcast to room from: {}", &addr_id_pair.0);
+
+            let token_result = decode_token(token);
+            match token_result {
+                Ok(_) => (),
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+            let token_info = token_result.unwrap().claims;
+
             let response = Response::newMessage {
                 text: text.to_owned(),
             };
 
             let mut rooms = room_list.lock().unwrap();
-            let room_index = rooms.iter().position(|room| &room.id == roomId);
+            let room_index = rooms.iter().position(|room| room.id == token_info.roomId);
             match room_index {
                 Some(_) => (),
                 None => {
@@ -279,6 +362,7 @@ fn execute_command(
             let user_list = target_room.user_list.clone();
 
             broadcast_message_room_all(response, peer_map, &user_list);
+            info!("Successful broadcast to room from: {}", &addr_id_pair.0);
         }
     }
 }

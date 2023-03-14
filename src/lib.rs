@@ -52,6 +52,8 @@ pub mod file_logger {
     }
 }
 
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
 pub mod command {
     use serde::{Deserialize, Serialize};
 
@@ -60,9 +62,9 @@ pub mod command {
         createRoom { name: String },
         joinRoom { name: String, roomId: String },
         heartbeat {},
-        startGame {},
-        getUserList { roomId: String },
-        broadcastMessage { text: String, roomId: String },
+        startGame { token: String },
+        getUserList { token: String },
+        broadcastMessage { token: String, text: String },
     }
 
     #[derive(Serialize, Deserialize)]
@@ -73,6 +75,8 @@ pub mod command {
     }
 }
 
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
 pub mod backend_models {
     use serde::{Deserialize, Serialize};
 
@@ -82,6 +86,7 @@ pub mod backend_models {
         pub name: String,
         pub avatarPath: String,
         pub roomId: String,
+        pub isHost: bool,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -98,18 +103,20 @@ pub mod backend_models {
         joinRoomResponse { token: String, userList: Vec<User> },
         updateUserList { userList: Vec<User> },
         newMessage { text: String },
+        startGame {},
         errorReponse { errorText: String },
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct Claims {
         pub id: String,
+        pub roomId: String,
     }
 }
 
 pub mod server_messages {
     use crate::backend_models::{Response, User};
-    use log::{info, warn};
+    use log::info;
     use std::{
         collections::HashMap,
         net::SocketAddr,
@@ -218,17 +225,33 @@ pub mod server_messages {
 }
 
 pub mod jwtoken_generation {
-    use jsonwebtoken::{encode, EncodingKey, Header};
+    use jsonwebtoken::{
+        decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
+    };
 
     use crate::backend_models::Claims;
 
-    pub fn generate_token(id: &String) -> Result<String, jsonwebtoken::errors::Error> {
-        let new_claims = Claims { id: id.clone() };
+    pub fn generate_token(
+        id: &String,
+        room_id: &String,
+    ) -> Result<String, jsonwebtoken::errors::Error> {
+        let new_claims = Claims {
+            id: id.clone(),
+            roomId: room_id.clone(),
+        };
         let token = encode(
             &Header::default(),
             &new_claims,
             &EncodingKey::from_secret("secret".as_ref()),
         );
         return token;
+    }
+
+    pub fn decode_token(token: &String) -> Result<TokenData<Claims>, jsonwebtoken::errors::Error> {
+        return decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret("secret".as_ref()),
+            &Validation::new(Algorithm::HS256),
+        );
     }
 }
