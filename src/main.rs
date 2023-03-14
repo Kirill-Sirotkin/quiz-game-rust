@@ -141,7 +141,6 @@ fn execute_command(
 
             let response = Response::createRoomResponse {
                 token: token.unwrap(),
-                roomId: new_room.id.clone(),
             };
 
             match user_list.lock() {
