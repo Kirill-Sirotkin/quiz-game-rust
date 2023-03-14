@@ -193,8 +193,6 @@ fn execute_command(
             }
             let target_room = rooms.get_mut(room_index.unwrap()).unwrap();
 
-            let user_list = target_room.user_list.clone();
-
             let token = generate_token(&new_user.id, &target_room.id);
             match token {
                 Ok(_) => (),
@@ -211,19 +209,19 @@ fn execute_command(
 
             let response = Response::joinRoomResponse {
                 token: token.unwrap(),
-                userList: user_list.clone(),
+                userList: target_room.user_list.clone(),
             };
 
             send_message(response, &peer_map, &addr_id_pair.0);
 
             let broadcast_response = Response::updateUserList {
-                userList: user_list.clone(),
+                userList: target_room.user_list.clone(),
             };
 
             broadcast_message_room_except(
                 broadcast_response,
                 &peer_map,
-                &user_list,
+                &target_room.user_list,
                 &addr_id_pair.0,
             );
 
