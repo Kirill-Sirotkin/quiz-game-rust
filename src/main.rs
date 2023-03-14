@@ -2,7 +2,7 @@ use log::{info, warn};
 use quiz_game_rust::file_logger::init_file_logger;
 use quiz_game_rust::jwtoken_generation::generate_token;
 use quiz_game_rust::server_messages::*;
-use quiz_game_rust::{command::*, quiz_game_backend_models::*};
+use quiz_game_rust::{backend_models::*, command::*};
 use std::{
     collections::HashMap,
     env,
@@ -110,9 +110,11 @@ fn execute_command(
         Command::createRoom { name } => {
             info!("Create Room request from: {}", &addr_id_pair.0);
 
-            let new_user = User {
+            let mut new_user = User {
                 id: current_user_id,
                 name: name.to_string(),
+                avatarPath: "".to_string(),
+                roomId: "".to_string(),
             };
 
             let token = generate_token(&new_user.id);
@@ -129,11 +131,11 @@ fn execute_command(
 
             let mut new_room = Room {
                 id: Uuid::new_v4().to_string(),
-                name: name.to_string(),
                 max_players: 6,
                 host_id: new_user.id.clone(),
                 user_list: Vec::new(),
             };
+            new_user.roomId = new_room.id.clone();
             new_room.user_list.push(new_user.clone());
 
             let response = Response::createRoomResponse {
@@ -172,6 +174,8 @@ fn execute_command(
             let new_user = User {
                 id: current_user_id,
                 name: name.to_string(),
+                avatarPath: "".to_string(),
+                roomId: roomId.clone(),
             };
 
             let token = generate_token(&new_user.id);
@@ -226,6 +230,55 @@ fn execute_command(
         }
         Command::heartbeat {} => {
             info!("Heartbeat from: {}", &addr_id_pair.0);
+        }
+        Command::startGame {} => {
+            info!("Start game command from: {}", &addr_id_pair.0);
+        }
+        Command::getUserList { roomId } => {
+            let mut rooms = room_list.lock().unwrap();
+            let room_index = rooms.iter().position(|room| &room.id == roomId);
+            match room_index {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "Room does not exist".to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+            let target_room = rooms.get_mut(room_index.unwrap()).unwrap();
+
+            let user_list = target_room.user_list.clone();
+
+            let response = Response::updateUserList {
+                userList: user_list,
+            };
+
+            send_message(response, peer_map, &addr_id_pair.0);
+        }
+        Command::broadcastMessage { text, roomId } => {
+            let response = Response::newMessage {
+                text: text.to_owned(),
+            };
+
+            let mut rooms = room_list.lock().unwrap();
+            let room_index = rooms.iter().position(|room| &room.id == roomId);
+            match room_index {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "Room does not exist".to_string(),
+                    };
+                    send_message(response, &peer_map, &addr_id_pair.0);
+                    return;
+                }
+            }
+            let target_room = rooms.get_mut(room_index.unwrap()).unwrap();
+
+            let user_list = target_room.user_list.clone();
+
+            broadcast_message_room_all(response, peer_map, &user_list);
         }
     }
 }

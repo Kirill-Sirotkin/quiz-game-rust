@@ -60,6 +60,9 @@ pub mod command {
         createRoom { name: String },
         joinRoom { name: String, roomId: String },
         heartbeat {},
+        startGame {},
+        getUserList { roomId: String },
+        broadcastMessage { text: String, roomId: String },
     }
 
     #[derive(Serialize, Deserialize)]
@@ -70,19 +73,20 @@ pub mod command {
     }
 }
 
-pub mod quiz_game_backend_models {
+pub mod backend_models {
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Clone)]
     pub struct User {
         pub id: String,
         pub name: String,
+        pub avatarPath: String,
+        pub roomId: String,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct Room {
         pub id: String,
-        pub name: String,
         pub max_players: i32,
         pub host_id: String,
         pub user_list: Vec<User>,
@@ -93,6 +97,7 @@ pub mod quiz_game_backend_models {
         createRoomResponse { token: String, roomId: String },
         joinRoomResponse { token: String, userList: Vec<User> },
         updateUserList { userList: Vec<User> },
+        newMessage { text: String },
         errorReponse { errorText: String },
     }
 
@@ -103,7 +108,7 @@ pub mod quiz_game_backend_models {
 }
 
 pub mod server_messages {
-    use crate::quiz_game_backend_models::{Response, User};
+    use crate::backend_models::{Response, User};
     use log::{info, warn};
     use std::{
         collections::HashMap,
@@ -215,7 +220,7 @@ pub mod server_messages {
 pub mod jwtoken_generation {
     use jsonwebtoken::{encode, EncodingKey, Header};
 
-    use crate::quiz_game_backend_models::Claims;
+    use crate::backend_models::Claims;
 
     pub fn generate_token(id: &String) -> Result<String, jsonwebtoken::errors::Error> {
         let new_claims = Claims { id: id.clone() };
