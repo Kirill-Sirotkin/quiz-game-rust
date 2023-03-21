@@ -1,8 +1,10 @@
 use log::{info, warn};
 use quiz_game_rust::file_logger::init_file_logger;
+use quiz_game_rust::game_models::*;
 use quiz_game_rust::jwtoken_generation::{decode_token, generate_token};
 use quiz_game_rust::server_messages::*;
 use quiz_game_rust::{backend_models::*, command::*};
+use std::fs;
 use std::{
     collections::HashMap,
     env,
@@ -282,6 +284,11 @@ fn execute_command(
 
             let broadcast_response = Response::startGame {};
             broadcast_message_room_all(broadcast_response, peer_map, &target_room.user_list);
+
+            let data = fs::read_to_string("./packs/test.json").expect("Unable to read file");
+            let pack: Pack = serde_json::from_str(&data).expect("JSON wrong format");
+
+            info!("Loading pack: {}", pack.name);
         }
         Command::getUserList { token } => {
             info!("Get user list request from: {}", &addr_id_pair.0);
