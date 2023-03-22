@@ -41,7 +41,7 @@ fn parse_game_command(msg: &Message) -> Result<(Claims, i32), String> {
 
 pub async fn handle_game(lists: Lists, user_list: Vec<User>, room_id: String, pack: Pack) {
     let (tx_room, rx_room) = unbounded();
-    lists.3.lock().unwrap().insert(room_id, tx_room);
+    lists.3.lock().unwrap().insert(room_id.clone(), tx_room);
 
     let answers = Arc::new(Mutex::new(HashMap::<String, i32>::new()));
     user_list.iter().for_each(|user| {
@@ -123,4 +123,6 @@ pub async fn handle_game(lists: Lists, user_list: Vec<User>, room_id: String, pa
 
     pin_mut!(receive_future, game_process_future);
     future::select(receive_future, game_process_future).await;
+
+    lists.3.lock().unwrap().remove(&room_id);
 }
