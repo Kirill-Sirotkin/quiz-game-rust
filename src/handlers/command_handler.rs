@@ -1,4 +1,5 @@
 use crate::{
+    handlers::game_handler::handle_game,
     jwtoken::{decode_token, generate_token},
     models::{
         communication::{Command, Response},
@@ -8,7 +9,7 @@ use crate::{
     server_messages::*,
 };
 use futures_channel::mpsc::UnboundedSender;
-use log::info;
+use log::{info, warn};
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -26,9 +27,9 @@ type GameList = Arc<Mutex<HashMap<String, Tx>>>;
 type Lists = (PeerMap, UserList, RoomList, GameList);
 type ConnectionInfo<'a> = (
     &'a (SocketAddr, String),
-    &'a Option<&'a User>,
-    &'a Option<&'a Room>,
-    &'a Option<(&'a String, &'a UnboundedSender<Message>)>,
+    Option<User>,
+    Option<Room>,
+    Option<(String, UnboundedSender<Message>)>,
 );
 
 pub fn parse_command(msg: &Message) -> Result<Command, serde_json::Error> {
@@ -41,21 +42,34 @@ pub fn parse_command(msg: &Message) -> Result<Command, serde_json::Error> {
 
 pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketAddr, String)) {
     let users = lists.1.lock().unwrap();
-    let current_user = users.iter().find(|user| user.id == addr_id_pair.1);
+    let current_user = match users.iter().find(|user| user.id == addr_id_pair.1) {
+        Some(user) => Some(user.clone()),
+        None => None,
+    };
 
     let rooms = lists.2.lock().unwrap();
     let current_room = match current_user {
-        Some(user) => rooms.iter().find(|room| room.id == user.roomId),
+        Some(ref user) => match rooms.iter().find(|room| room.id == user.roomId) {
+            Some(room) => Some(room.clone()),
+            None => None,
+        },
         None => None,
     };
 
     let games = lists.3.lock().unwrap();
     let current_game = match current_room {
-        Some(room) => games.iter().find(|game| game.0 == &room.id),
+        Some(ref room) => match games.iter().find(|game| game.0 == &room.id) {
+            Some(game) => Some((game.0.clone(), game.1.clone())),
+            None => None,
+        },
         None => None,
     };
 
-    let connection_info = (addr_id_pair, &current_user, &current_room, &current_game);
+    let connection_info = (addr_id_pair, current_user, current_room, current_game);
+
+    drop(users);
+    drop(rooms);
+    drop(games);
 
     match command {
         Command::createRoom { name } => {
@@ -108,7 +122,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                     return;
                 }
             };
-            target_room.user_list.push(join_room_result.0);
+            target_room.user_list.push(join_room_result.0.clone());
 
             let response = Response::joinRoomResponse {
                 token: join_room_result.1,
@@ -128,6 +142,8 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                 &addr_id_pair.0,
             );
 
+            lists.1.lock().unwrap().push(join_room_result.0);
+
             info!("Successful room join for: {}", &addr_id_pair.0);
         }
         Command::heartbeat {} => {
@@ -135,17 +151,6 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
         }
         Command::startGame { token } => {
             info!("Start game command from: {}", &addr_id_pair.0);
-
-            match current_user {
-                Some(_) => (),
-                None => {
-                    let response = Response::errorReponse {
-                        errorText: "User does not exist".to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            }
 
             let token_info = match decode_token(token) {
                 Ok(res) => res.claims,
@@ -158,11 +163,34 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                 }
             };
 
-            if !current_user.unwrap().isHost {
+            match connection_info.1 {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "User does not exist".to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            }
+
+            match connection_info.3 {
+                Some(_) => {
+                    let response = Response::errorReponse {
+                        errorText: "Game already in progress".to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+                None => (),
+            }
+
+            if !connection_info.1.unwrap().isHost {
                 let response = Response::errorReponse {
                     errorText: "Only host can start the game".to_string(),
                 };
                 send_message(response, &lists.0, &addr_id_pair.0);
+                return;
             }
 
             let mut rooms = lists.2.lock().unwrap();
@@ -183,7 +211,19 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             let data = fs::read_to_string("./packs/test.json").expect("Unable to read file");
             let pack: Pack = serde_json::from_str(&data).expect("JSON wrong format");
 
-            info!("Loading pack: {}", pack.name);
+            tokio::spawn(handle_game(
+                (
+                    lists.0.clone(),
+                    lists.1.clone(),
+                    lists.2.clone(),
+                    lists.3.clone(),
+                ),
+                target_room.user_list.clone(),
+                target_room.id.clone(),
+                pack,
+            ));
+
+            info!("Loading pack success");
         }
         Command::getUserList { token } => {
             info!("Get user list request from: {}", &addr_id_pair.0);
@@ -220,7 +260,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             send_message(response, &lists.0, &addr_id_pair.0);
             info!("Successful get user list from: {}", &addr_id_pair.0);
         }
-        Command::broadcastMessage { text, token } => {
+        Command::broadcastMessage { token, text } => {
             info!("Broadcast to room from: {}", &addr_id_pair.0);
 
             let token_info = match decode_token(token) {
@@ -254,6 +294,68 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
 
             broadcast_message_room_all(response, &lists.0, &user_list);
             info!("Successful broadcast to room from: {}", &addr_id_pair.0);
+        }
+        Command::writeAnswer { token, answer } => {
+            info!("Answer message from: {}", &addr_id_pair.0);
+
+            let _token_info = match decode_token(token) {
+                Ok(res) => res.claims,
+                Err(error) => {
+                    warn!("Error at token validation: {}", error.to_string());
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+
+            match connection_info.1 {
+                Some(_) => (),
+                None => {
+                    warn!("User does not exist");
+                    let response = Response::errorReponse {
+                        errorText: "User does not exist".to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            }
+
+            match connection_info.2 {
+                Some(_) => (),
+                None => {
+                    warn!("Room does not exist");
+                    let response = Response::errorReponse {
+                        errorText: "Room does not exist".to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            }
+
+            match connection_info.3 {
+                Some(_) => (),
+                None => {
+                    warn!("Game does not exist");
+                    let response = Response::errorReponse {
+                        errorText: "Game does not exist".to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            }
+
+            let answer = GameCommand {
+                token: token.to_string(),
+                answer: *answer,
+            };
+            connection_info
+                .3
+                .unwrap()
+                .1
+                .unbounded_send(Message::Text(serde_json::to_string(&answer).unwrap()))
+                .unwrap();
         }
     }
 }

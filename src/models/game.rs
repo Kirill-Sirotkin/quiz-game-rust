@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Answer {
     pub number: i32,
     pub text: String,
@@ -18,6 +18,14 @@ pub struct Question {
 pub struct Pack {
     pub name: String,
     pub questions: Vec<Question>,
+}
+
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize)]
+pub struct GameCommand {
+    pub token: String,
+    pub answer: i32,
 }
 
 pub fn test_pack() -> Pack {

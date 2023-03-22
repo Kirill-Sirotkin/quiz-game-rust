@@ -11,7 +11,7 @@ pub struct User {
     pub isHost: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Room {
     pub id: String,
     pub max_players: i32,

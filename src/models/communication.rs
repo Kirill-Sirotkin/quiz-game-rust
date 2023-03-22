@@ -1,17 +1,47 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
-use super::lobby::User;
+use super::{game::Answer, lobby::User};
 
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize)]
 pub enum Response {
-    createRoomResponse { token: String },
-    joinRoomResponse { token: String, userList: Vec<User> },
-    updateUserList { userList: Vec<User> },
-    newMessage { text: String },
+    createRoomResponse {
+        token: String,
+    },
+    joinRoomResponse {
+        token: String,
+        userList: Vec<User>,
+    },
+    updateUserList {
+        userList: Vec<User>,
+    },
+    newMessage {
+        text: String,
+    },
     startGame {},
-    errorReponse { errorText: String },
+    errorReponse {
+        errorText: String,
+    },
+    questionResponse {
+        question: String,
+    },
+    answersResponse {
+        answers: Vec<Answer>,
+        timer: i32,
+    },
+    timerResponse {
+        timer: i32,
+    },
+    correctAnswerResponse {
+        answers: HashMap<String, i32>,
+        correct_answer: i32,
+    },
+    scoresResponse {
+        scores: HashMap<String, i32>,
+    },
 }
 
 #[allow(non_snake_case)]
@@ -24,4 +54,5 @@ pub enum Command {
     startGame { token: String },
     getUserList { token: String },
     broadcastMessage { token: String, text: String },
+    writeAnswer { token: String, answer: i32 },
 }
