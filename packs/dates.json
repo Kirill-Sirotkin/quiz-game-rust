@@ -1,0 +1,235 @@
+{
+  "name": "ДАТЫ",
+  "questions": [
+    {
+      "text": "Год начала XXI века",
+      "answers": [
+        {
+          "number": 1,
+          "text": "1999"
+        },
+        {
+          "number": 2,
+          "text": "1900"
+        },
+        {
+          "number": 3,
+          "text": "2000"
+        },
+        {
+          "number": 4,
+          "text": "2001"
+        }
+      ],
+      "correct_answer": 3,
+      "duration_sec": 10
+    },
+    {
+      "text": "Дата празднования Нового Года",
+      "answers": [
+        {
+          "number": 1,
+          "text": "1 Января"
+        },
+        {
+          "number": 2,
+          "text": "31 Декабря"
+        },
+        {
+          "number": 3,
+          "text": "30 Декабря"
+        },
+        {
+          "number": 4,
+          "text": "1 Апреля"
+        }
+      ],
+      "correct_answer": 1,
+      "duration_sec": 10
+    },
+    {
+      "text": "Год распада СССР",
+      "answers": [
+        {
+          "number": 1,
+          "text": "1990"
+        },
+        {
+          "number": 2,
+          "text": "1999"
+        },
+        {
+          "number": 3,
+          "text": "1991"
+        },
+        {
+          "number": 4,
+          "text": "2000"
+        }
+      ],
+      "correct_answer": 3,
+      "duration_sec": 10
+    },
+    {
+      "text": "Год зимней олимпиады в Сочи",
+      "answers": [
+        {
+          "number": 1,
+          "text": "2012"
+        },
+        {
+          "number": 2,
+          "text": "2014"
+        },
+        {
+          "number": 3,
+          "text": "2000"
+        },
+        {
+          "number": 4,
+          "text": "2008"
+        }
+      ],
+      "correct_answer": 2,
+      "duration_sec": 10
+    },
+    {
+      "text": "Дата выхода патча в доте",
+      "answers": [
+        {
+          "number": 1,
+          "text": "Апрель 2023"
+        },
+        {
+          "number": 2,
+          "text": "Май 2023"
+        },
+        {
+          "number": 3,
+          "text": "вторая половина 2023"
+        },
+        {
+          "number": 4,
+          "text": "уже неважно"
+        }
+      ],
+      "correct_answer": 4,
+      "duration_sec": 10
+    },
+    {
+      "text": "Годы Первой Мировой Войны",
+      "answers": [
+        {
+          "number": 1,
+          "text": "1914-1918"
+        },
+        {
+          "number": 2,
+          "text": "1914-1920"
+        },
+        {
+          "number": 3,
+          "text": "1940-1945"
+        },
+        {
+          "number": 4,
+          "text": "1939-1946"
+        }
+      ],
+      "correct_answer": 1,
+      "duration_sec": 10
+    },
+    {
+      "text": "Год начала мирового экономического кризиса",
+      "answers": [
+        {
+          "number": 1,
+          "text": "1999"
+        },
+        {
+          "number": 2,
+          "text": "2007"
+        },
+        {
+          "number": 3,
+          "text": "2000"
+        },
+        {
+          "number": 4,
+          "text": "2008"
+        }
+      ],
+      "correct_answer": 4,
+      "duration_sec": 10
+    },
+    {
+      "text": "Год выхода WWW в общий доступ",
+      "answers": [
+        {
+          "number": 1,
+          "text": "1991"
+        },
+        {
+          "number": 2,
+          "text": "1989"
+        },
+        {
+          "number": 3,
+          "text": "2001"
+        },
+        {
+          "number": 4,
+          "text": "1969"
+        }
+      ],
+      "correct_answer": 1,
+      "duration_sec": 10
+    },
+    {
+      "text": "Год первого избрания Путина",
+      "answers": [
+        {
+          "number": 1,
+          "text": "1991"
+        },
+        {
+          "number": 2,
+          "text": "1999"
+        },
+        {
+          "number": 3,
+          "text": "2000"
+        },
+        {
+          "number": 4,
+          "text": "2004"
+        }
+      ],
+      "correct_answer": 3,
+      "duration_sec": 10
+    },
+    {
+      "text": "Год крещения Руси",
+      "answers": [
+        {
+          "number": 1,
+          "text": "882"
+        },
+        {
+          "number": 2,
+          "text": "988"
+        },
+        {
+          "number": 3,
+          "text": "1337"
+        },
+        {
+          "number": 4,
+          "text": "1703"
+        }
+      ],
+      "correct_answer": 2,
+      "duration_sec": 10
+    }
+  ]
+}

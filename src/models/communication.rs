@@ -51,7 +51,7 @@ pub enum Command {
     createRoom { name: String },
     joinRoom { name: String, roomId: String },
     heartbeat {},
-    startGame { token: String },
+    startGame { token: String, packPath: String },
     getUserList { token: String },
     broadcastMessage { token: String, text: String },
     writeAnswer { token: String, answer: i32 },

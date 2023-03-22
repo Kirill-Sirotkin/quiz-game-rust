@@ -149,7 +149,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
         Command::heartbeat {} => {
             info!("Heartbeat from: {}", &addr_id_pair.0);
         }
-        Command::startGame { token } => {
+        Command::startGame { token, packPath } => {
             info!("Start game command from: {}", &addr_id_pair.0);
 
             let token_info = match decode_token(token) {
@@ -208,8 +208,27 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             let broadcast_response = Response::startGame {};
             broadcast_message_room_all(broadcast_response, &lists.0, &target_room.user_list);
 
-            let data = fs::read_to_string("./packs/test.json").expect("Unable to read file");
-            let pack: Pack = serde_json::from_str(&data).expect("JSON wrong format");
+            // previously: fs::read_to_string("./packs/test.json")
+            let data = match fs::read_to_string(packPath) {
+                Ok(data) => data,
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+            let pack: Pack = match serde_json::from_str(&data) {
+                Ok(pack) => pack,
+                Err(error) => {
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
 
             tokio::spawn(handle_game(
                 (

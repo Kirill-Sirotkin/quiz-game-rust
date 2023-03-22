@@ -1,0 +1,35 @@
+{
+  "name": "test pack",
+  "questions": [
+    {
+      "text": "Is a1 correct?",
+      "answers": [
+        {
+          "number": 1,
+          "text": "A1"
+        },
+        {
+          "number": 2,
+          "text": "A2"
+        }
+      ],
+      "correct_answer": 1,
+      "duration_sec": 15
+    },
+    {
+      "text": "Is a2 correct?",
+      "answers": [
+        {
+          "number": 1,
+          "text": "A1"
+        },
+        {
+          "number": 2,
+          "text": "A2"
+        }
+      ],
+      "correct_answer": 2,
+      "duration_sec": 15
+    }
+  ]
+}
