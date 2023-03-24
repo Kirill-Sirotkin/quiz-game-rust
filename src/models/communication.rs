@@ -48,11 +48,37 @@ pub enum Response {
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize)]
 pub enum Command {
-    createRoom { name: String },
-    joinRoom { name: String, roomId: String },
+    createRoom {
+        name: String,
+        avatarPath: String,
+    },
+    joinRoom {
+        name: String,
+        avatarPath: String,
+        roomId: String,
+    },
     heartbeat {},
-    startGame { token: String, packPath: String },
-    getUserList { token: String },
-    broadcastMessage { token: String, text: String },
-    writeAnswer { token: String, answer: i32 },
+    startGame {
+        token: String,
+        packPath: String,
+    },
+    getUserList {
+        token: String,
+    },
+    broadcastMessage {
+        token: String,
+        text: String,
+    },
+    writeAnswer {
+        token: String,
+        answer: i32,
+    },
+    changeUsername {
+        token: String,
+        newName: String,
+    },
+    changeAvatar {
+        token: String,
+        newAvatarPath: String,
+    },
 }

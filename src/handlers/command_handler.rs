@@ -72,19 +72,20 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
     drop(games);
 
     match command {
-        Command::createRoom { name } => {
+        Command::createRoom { name, avatarPath } => {
             info!("Create Room request from: {}", &addr_id_pair.0);
 
-            let create_room_result = match create_room(&connection_info, name.to_owned()) {
-                Ok(res) => res,
-                Err(err) => {
-                    let response = Response::errorReponse {
-                        errorText: err.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
+            let create_room_result =
+                match create_room(&connection_info, name.to_owned(), avatarPath.to_owned()) {
+                    Ok(res) => res,
+                    Err(err) => {
+                        let response = Response::errorReponse {
+                            errorText: err.to_string(),
+                        };
+                        send_message(response, &lists.0, &addr_id_pair.0);
+                        return;
+                    }
+                };
 
             let response = Response::createRoomResponse {
                 token: create_room_result.1,
@@ -96,20 +97,28 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             send_message(response, &lists.0, &addr_id_pair.0);
             info!("Successful room creation for: {}", &addr_id_pair.0);
         }
-        Command::joinRoom { name, roomId } => {
+        Command::joinRoom {
+            name,
+            avatarPath,
+            roomId,
+        } => {
             info!("Join Room request from: {}", &addr_id_pair.0);
 
-            let join_room_result =
-                match join_room(connection_info, name.to_owned(), roomId.to_owned()) {
-                    Ok(res) => res,
-                    Err(err) => {
-                        let response = Response::errorReponse {
-                            errorText: err.to_string(),
-                        };
-                        send_message(response, &lists.0, &addr_id_pair.0);
-                        return;
-                    }
-                };
+            let join_room_result = match join_room(
+                connection_info,
+                name.to_owned(),
+                avatarPath.to_owned(),
+                roomId.to_owned(),
+            ) {
+                Ok(res) => res,
+                Err(err) => {
+                    let response = Response::errorReponse {
+                        errorText: err.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
 
             let mut rooms = lists.2.lock().unwrap();
             let target_room = match get_room_by_id(roomId, &mut rooms) {
@@ -375,13 +384,47 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                 .1
                 .unbounded_send(Message::Text(serde_json::to_string(&answer).unwrap()))
                 .unwrap();
+
+            info!("Successful answer message from: {}", &addr_id_pair.0);
         }
+        Command::changeUsername { token, newName } => {
+            let token_info = match decode_token(token) {
+                Ok(res) => res.claims,
+                Err(error) => {
+                    warn!("Error at token validation: {}", error.to_string());
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+
+            match get_user_by_id(&token_info.id, &mut lists.1.lock().unwrap()) {
+                Ok(user) => {
+                    user.name = newName.to_owned();
+                }
+                Err(error) => {
+                    warn!("Error when changing username: {}", error.to_string());
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+        }
+        Command::changeAvatar {
+            token,
+            newAvatarPath,
+        } => (),
     }
 }
 
 fn create_room(
     connection_info: &ConnectionInfo,
     name: String,
+    avatar_path: String,
 ) -> Result<(User, String, Room), String> {
     match connection_info.1 {
         Some(_) => return Err("User already exists".to_string()),
@@ -391,7 +434,7 @@ fn create_room(
     let mut new_user = User {
         id: connection_info.0 .1.clone(),
         name: name.to_string(),
-        avatarPath: "".to_string(),
+        avatarPath: avatar_path.to_string(),
         roomId: "".to_string(),
         isHost: true,
     };
@@ -419,6 +462,7 @@ fn create_room(
 fn join_room(
     connection_info: ConnectionInfo,
     name: String,
+    avatar_path: String,
     room_id: String,
 ) -> Result<(User, String), String> {
     match connection_info.1 {
@@ -426,10 +470,15 @@ fn join_room(
         None => (),
     }
 
+    match connection_info.3 {
+        Some(_) => return Err("Game in progress".to_string()),
+        None => (),
+    }
+
     let new_user = User {
         id: connection_info.0 .1.clone(),
         name: name.to_string(),
-        avatarPath: "".to_string(),
+        avatarPath: avatar_path.to_string(),
         roomId: room_id.to_string(),
         isHost: false,
     };
@@ -455,5 +504,18 @@ fn get_room_by_id<'a>(
     match target_room {
         Some(room) => Ok(room),
         None => Err("Room does not exist".to_string()),
+    }
+}
+
+fn get_user_by_id<'a>(
+    id: &String,
+    users: &'a mut MutexGuard<Vec<User>>,
+) -> Result<&'a mut User, String> {
+    let user_index = users.iter().position(|user| &user.id == id);
+    let target_user = users.get_mut(user_index.unwrap());
+
+    match target_user {
+        Some(user) => Ok(user),
+        None => Err("User does not exist".to_string()),
     }
 }
