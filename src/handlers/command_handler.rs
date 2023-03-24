@@ -402,7 +402,41 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
 
             match get_user_by_id(&token_info.id, &mut lists.1.lock().unwrap()) {
                 Ok(user) => {
-                    user.name = newName.to_owned();
+                    user.name = newName.to_owned().clone();
+                }
+                Err(error) => {
+                    warn!("Error when changing username: {}", error.to_string());
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+
+            match get_room_by_id(&token_info.roomId, &mut lists.2.lock().unwrap()) {
+                Ok(target_room) => {
+                    let user_index = match target_room
+                        .user_list
+                        .iter()
+                        .position(|user| user.id == token_info.id)
+                    {
+                        Some(index) => index,
+                        None => {
+                            warn!("Error when changing username: User not found in room");
+                            let response = Response::errorReponse {
+                                errorText: "User not found in room".to_string(),
+                            };
+                            send_message(response, &lists.0, &addr_id_pair.0);
+                            return;
+                        }
+                    };
+                    let response = Response::updateUserList {
+                        userList: target_room.user_list.clone(),
+                    };
+                    broadcast_message_room_all(response, &lists.0, &target_room.user_list);
+
+                    target_room.user_list.get_mut(user_index).unwrap().name = newName.to_owned();
                 }
                 Err(error) => {
                     warn!("Error when changing username: {}", error.to_string());
@@ -417,7 +451,71 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
         Command::changeAvatar {
             token,
             newAvatarPath,
-        } => (),
+        } => {
+            let token_info = match decode_token(token) {
+                Ok(res) => res.claims,
+                Err(error) => {
+                    warn!("Error at token validation: {}", error.to_string());
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+
+            match get_user_by_id(&token_info.id, &mut lists.1.lock().unwrap()) {
+                Ok(user) => {
+                    user.avatarPath = newAvatarPath.to_owned().clone();
+                }
+                Err(error) => {
+                    warn!("Error when changing avatar: {}", error.to_string());
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+
+            match get_room_by_id(&token_info.roomId, &mut lists.2.lock().unwrap()) {
+                Ok(target_room) => {
+                    let user_index = match target_room
+                        .user_list
+                        .iter()
+                        .position(|user| user.id == token_info.id)
+                    {
+                        Some(index) => index,
+                        None => {
+                            warn!("Error when changing avatar: User not found in room");
+                            let response = Response::errorReponse {
+                                errorText: "User not found in room".to_string(),
+                            };
+                            send_message(response, &lists.0, &addr_id_pair.0);
+                            return;
+                        }
+                    };
+                    let response = Response::updateUserList {
+                        userList: target_room.user_list.clone(),
+                    };
+                    broadcast_message_room_all(response, &lists.0, &target_room.user_list);
+
+                    target_room
+                        .user_list
+                        .get_mut(user_index)
+                        .unwrap()
+                        .avatarPath = newAvatarPath.to_owned();
+                }
+                Err(error) => {
+                    warn!("Error when changing avatar: {}", error.to_string());
+                    let response = Response::errorReponse {
+                        errorText: error.to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            };
+        }
     }
 }
 
