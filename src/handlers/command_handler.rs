@@ -264,6 +264,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
 
             let response = Response::newMessage {
                 text: text.to_owned(),
+                author: token_info.id,
             };
 
             let user_list = get_room_user_list(&token_info.roomId, lists.1.lock().unwrap());

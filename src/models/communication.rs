@@ -19,6 +19,7 @@ pub enum Response {
         userList: Vec<User>,
     },
     newMessage {
+        author: String,
         text: String,
     },
     startGame {},
