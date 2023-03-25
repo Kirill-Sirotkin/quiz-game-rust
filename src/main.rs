@@ -34,7 +34,7 @@ async fn main() -> Result<(), IoError> {
 
     let try_socket = TcpListener::bind(&addr).await;
     let listener = try_socket.expect("Failed to bind");
-    println!("Listening on: {}", addr);
+    info!("Listening on: {}", addr);
 
     let users = UserList::new(Mutex::new(Vec::new()));
     let rooms = RoomList::new(Mutex::new(Vec::new()));

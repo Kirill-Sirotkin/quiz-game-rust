@@ -1,5 +1,6 @@
 use crate::{
     handlers::game_handler::handle_game,
+    helpers::get_room_user_list,
     jwtoken::{decode_token, generate_token},
     models::{
         communication::{Command, Response},
@@ -31,14 +32,6 @@ type ConnectionInfo<'a> = (
     Option<Room>,
     Option<(String, UnboundedSender<Message>)>,
 );
-
-pub fn parse_command(msg: &Message) -> Result<Command, serde_json::Error> {
-    let parsed_msg: Result<Command, serde_json::Error> = serde_json::from_str(&msg.to_string());
-    match parsed_msg {
-        Ok(command) => return Ok(command),
-        Err(error) => return Err(error),
-    }
-}
 
 pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketAddr, String)) {
     let users = lists.1.lock().unwrap();
@@ -131,23 +124,22 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                     return;
                 }
             };
-            target_room.user_list.push(join_room_result.0.clone());
 
             let response = Response::joinRoomResponse {
                 token: join_room_result.1,
-                userList: target_room.user_list.clone(),
+                userList: get_room_user_list(&target_room.id, lists.1.lock().unwrap()),
             };
 
             send_message(response, &lists.0, &addr_id_pair.0);
 
             let broadcast_response = Response::updateUserList {
-                userList: target_room.user_list.clone(),
+                userList: get_room_user_list(&target_room.id, lists.1.lock().unwrap()),
             };
 
             broadcast_message_room_except(
                 broadcast_response,
                 &lists.0,
-                &target_room.user_list,
+                &get_room_user_list(&target_room.id, lists.1.lock().unwrap()),
                 &addr_id_pair.0,
             );
 
@@ -215,7 +207,11 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             };
 
             let broadcast_response = Response::startGame {};
-            broadcast_message_room_all(broadcast_response, &lists.0, &target_room.user_list);
+            broadcast_message_room_all(
+                broadcast_response,
+                &lists.0,
+                &get_room_user_list(&target_room.id, lists.1.lock().unwrap()),
+            );
 
             // previously: fs::read_to_string("./packs/test.json")
             let data = match fs::read_to_string(packPath) {
@@ -246,7 +242,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                     lists.2.clone(),
                     lists.3.clone(),
                 ),
-                target_room.user_list.clone(),
+                get_room_user_list(&target_room.id, lists.1.lock().unwrap()),
                 target_room.id.clone(),
                 pack,
             ));
@@ -279,7 +275,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                 }
             };
 
-            let user_list = target_room.user_list.clone();
+            let user_list = get_room_user_list(&target_room.id, lists.1.lock().unwrap());
 
             let response = Response::updateUserList {
                 userList: user_list,
@@ -318,7 +314,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                 }
             };
 
-            let user_list = target_room.user_list.clone();
+            let user_list = get_room_user_list(&target_room.id, lists.1.lock().unwrap());
 
             broadcast_message_room_all(response, &lists.0, &user_list);
             info!("Successful broadcast to room from: {}", &addr_id_pair.0);
@@ -413,40 +409,6 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                     return;
                 }
             };
-
-            match get_room_by_id(&token_info.roomId, &mut lists.2.lock().unwrap()) {
-                Ok(target_room) => {
-                    let user_index = match target_room
-                        .user_list
-                        .iter()
-                        .position(|user| user.id == token_info.id)
-                    {
-                        Some(index) => index,
-                        None => {
-                            warn!("Error when changing username: User not found in room");
-                            let response = Response::errorReponse {
-                                errorText: "User not found in room".to_string(),
-                            };
-                            send_message(response, &lists.0, &addr_id_pair.0);
-                            return;
-                        }
-                    };
-                    let response = Response::updateUserList {
-                        userList: target_room.user_list.clone(),
-                    };
-                    broadcast_message_room_all(response, &lists.0, &target_room.user_list);
-
-                    target_room.user_list.get_mut(user_index).unwrap().name = newName.to_owned();
-                }
-                Err(error) => {
-                    warn!("Error when changing username: {}", error.to_string());
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
         }
         Command::changeAvatar {
             token,
@@ -467,44 +429,6 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             match get_user_by_id(&token_info.id, &mut lists.1.lock().unwrap()) {
                 Ok(user) => {
                     user.avatarPath = newAvatarPath.to_owned().clone();
-                }
-                Err(error) => {
-                    warn!("Error when changing avatar: {}", error.to_string());
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            match get_room_by_id(&token_info.roomId, &mut lists.2.lock().unwrap()) {
-                Ok(target_room) => {
-                    let user_index = match target_room
-                        .user_list
-                        .iter()
-                        .position(|user| user.id == token_info.id)
-                    {
-                        Some(index) => index,
-                        None => {
-                            warn!("Error when changing avatar: User not found in room");
-                            let response = Response::errorReponse {
-                                errorText: "User not found in room".to_string(),
-                            };
-                            send_message(response, &lists.0, &addr_id_pair.0);
-                            return;
-                        }
-                    };
-                    let response = Response::updateUserList {
-                        userList: target_room.user_list.clone(),
-                    };
-                    broadcast_message_room_all(response, &lists.0, &target_room.user_list);
-
-                    target_room
-                        .user_list
-                        .get_mut(user_index)
-                        .unwrap()
-                        .avatarPath = newAvatarPath.to_owned();
                 }
                 Err(error) => {
                     warn!("Error when changing avatar: {}", error.to_string());
@@ -537,14 +461,13 @@ fn create_room(
         isHost: true,
     };
 
-    let mut new_room = Room {
+    let new_room = Room {
         id: Uuid::new_v4().to_string(),
         max_players: 6,
         host_id: new_user.id.clone(),
-        user_list: Vec::new(),
+        current_players: 1,
     };
     new_user.roomId = new_room.id.clone();
-    new_room.user_list.push(new_user.clone());
 
     let token = generate_token(&new_user.id, &new_room.id);
     match token {

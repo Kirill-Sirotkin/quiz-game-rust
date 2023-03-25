@@ -16,5 +16,5 @@ pub struct Room {
     pub id: String,
     pub max_players: i32,
     pub host_id: String,
-    pub user_list: Vec<User>,
+    pub current_players: i32,
 }

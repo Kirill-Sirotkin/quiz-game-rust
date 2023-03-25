@@ -1,8 +1,8 @@
 use crate::{
-    jwtoken::{decode_token, Claims},
+    helpers::parse_game_command,
     models::{
         communication::Response,
-        game::{GameCommand, Pack},
+        game::Pack,
         lobby::{Room, User},
     },
     server_messages::broadcast_message_room_all,
@@ -24,20 +24,6 @@ type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;
 type Lists = (PeerMap, UserList, RoomList, GameList);
-
-fn parse_game_command(msg: &Message) -> Result<(Claims, i32), String> {
-    let parsed_msg: Result<GameCommand, serde_json::Error> = serde_json::from_str(&msg.to_string());
-    match parsed_msg {
-        Ok(command) => {
-            let token_info = match decode_token(&command.token) {
-                Ok(res) => res,
-                Err(err) => return Err(err.to_string()),
-            };
-            return Ok((token_info.claims, command.answer));
-        }
-        Err(error) => return Err(error.to_string()),
-    }
-}
 
 pub async fn handle_game(lists: Lists, user_list: Vec<User>, room_id: String, pack: Pack) {
     let (tx_room, rx_room) = unbounded();

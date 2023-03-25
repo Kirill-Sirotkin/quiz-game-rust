@@ -1,5 +1,5 @@
 use chrono;
-use log::{LevelFilter, SetLoggerError};
+use log::{info, LevelFilter, SetLoggerError};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
@@ -19,6 +19,7 @@ pub fn init_file_logger() -> Result<(), SetLoggerError> {
         .build(Root::builder().appender("logfile").build(LevelFilter::Info));
 
     log4rs::init_config(config.unwrap())?;
+    info!("File logger initialized");
 
     Ok(())
 }
