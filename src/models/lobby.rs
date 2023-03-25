@@ -4,6 +4,10 @@ use rand::{
 };
 use serde::{Deserialize, Serialize};
 
+pub trait HasId {
+    fn get_id(&self) -> String;
+}
+
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Clone)]
@@ -15,6 +19,11 @@ pub struct User {
     pub isHost: bool,
     pub userColor: String,
 }
+impl HasId for User {
+    fn get_id(&self) -> String {
+        return self.id.clone();
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Room {
@@ -22,6 +31,11 @@ pub struct Room {
     pub max_players: i32,
     pub host_id: String,
     pub current_players: i32,
+}
+impl HasId for Room {
+    fn get_id(&self) -> String {
+        return self.id.clone();
+    }
 }
 
 pub enum UserColors {
