@@ -701,6 +701,7 @@ dependencies = [
  "jsonwebtoken",
  "log",
  "log4rs",
+ "rand",
  "rusqlite",
  "serde",
  "serde_json",

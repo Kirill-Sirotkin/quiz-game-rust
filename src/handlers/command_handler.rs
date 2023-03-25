@@ -5,7 +5,7 @@ use crate::{
     models::{
         communication::{Command, Response},
         game::*,
-        lobby::{Room, User},
+        lobby::{Room, User, UserColors},
     },
     server_messages::*,
 };
@@ -460,13 +460,14 @@ fn create_room(
         current_players: 1,
     };
 
+    let color: UserColors = rand::random();
     let new_user = User {
         id: connection_info.0 .1.clone(),
         name: name.to_string(),
         avatarPath: avatar_path.to_string(),
         roomId: new_room.id.clone(),
         isHost: true,
-        userColor: "".to_string(),
+        userColor: color.value(),
     };
 
     let token = generate_token(&new_user);
@@ -496,13 +497,14 @@ fn join_room(
         None => (),
     }
 
+    let color: UserColors = rand::random();
     let new_user = User {
         id: connection_info.0 .1.clone(),
         name: name.to_string(),
         avatarPath: avatar_path.to_string(),
         roomId: room_id.to_string(),
         isHost: false,
-        userColor: "".to_string(),
+        userColor: color.value(),
     };
 
     let token = generate_token(&new_user);
