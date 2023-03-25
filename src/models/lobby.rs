@@ -9,6 +9,7 @@ pub struct User {
     pub avatarPath: String,
     pub roomId: String,
     pub isHost: bool,
+    pub userColor: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

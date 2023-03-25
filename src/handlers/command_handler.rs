@@ -453,23 +453,23 @@ fn create_room(
         None => (),
     }
 
-    let mut new_user = User {
-        id: connection_info.0 .1.clone(),
-        name: name.to_string(),
-        avatarPath: avatar_path.to_string(),
-        roomId: "".to_string(),
-        isHost: true,
-    };
-
     let new_room = Room {
         id: Uuid::new_v4().to_string(),
         max_players: 6,
-        host_id: new_user.id.clone(),
+        host_id: connection_info.0 .1.clone(),
         current_players: 1,
     };
-    new_user.roomId = new_room.id.clone();
 
-    let token = generate_token(&new_user.id, &new_room.id);
+    let new_user = User {
+        id: connection_info.0 .1.clone(),
+        name: name.to_string(),
+        avatarPath: avatar_path.to_string(),
+        roomId: new_room.id.clone(),
+        isHost: true,
+        userColor: "".to_string(),
+    };
+
+    let token = generate_token(&new_user);
     match token {
         Ok(token) => {
             return Ok((new_user, token, new_room));
@@ -502,9 +502,10 @@ fn join_room(
         avatarPath: avatar_path.to_string(),
         roomId: room_id.to_string(),
         isHost: false,
+        userColor: "".to_string(),
     };
 
-    let token = generate_token(&new_user.id, &room_id);
+    let token = generate_token(&new_user);
     match token {
         Ok(token) => {
             return Ok((new_user, token));

@@ -1,7 +1,11 @@
 use crate::{
     handlers::command_handler::execute_command,
     helpers::parse_command,
-    models::lobby::{Room, User},
+    models::{
+        communication::Response,
+        lobby::{Room, User},
+    },
+    server_messages::send_message,
 };
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
@@ -43,7 +47,13 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
     let broadcast_incoming = incoming.try_for_each(|msg| {
         match parse_command(&msg) {
             Ok(command) => execute_command(&command, &lists, &addr_id_pair),
-            Err(error) => warn!("Error parsing command!: {}", error),
+            Err(error) => {
+                warn!("Error parsing command!: {}", error);
+                let response = Response::errorReponse {
+                    errorText: error.to_string(),
+                };
+                send_message(response, &lists.0, &addr_id_pair.0);
+            }
         }
 
         future::ok(())

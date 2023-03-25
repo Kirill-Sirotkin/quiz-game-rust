@@ -4,18 +4,21 @@ use jsonwebtoken::{
 };
 use serde::{Deserialize, Serialize};
 
-pub fn generate_token(
-    id: &String,
-    room_id: &String,
-) -> Result<String, jsonwebtoken::errors::Error> {
+use crate::models::lobby::User;
+
+pub fn generate_token(user: &User) -> Result<String, jsonwebtoken::errors::Error> {
     let expiration = Utc::now()
         .checked_add_days(Days::new(1))
         .expect("Timestamp invalid")
         .timestamp();
 
     let new_claims = Claims {
-        id: id.clone(),
-        roomId: room_id.clone(),
+        id: user.id.clone(),
+        roomId: user.roomId.clone(),
+        name: user.name.clone(),
+        avatarPath: user.avatarPath.clone(),
+        isHost: user.isHost.clone(),
+        userColor: user.userColor.clone(),
         exp: expiration as usize,
     };
     let token = encode(
@@ -39,6 +42,10 @@ pub fn decode_token(token: &String) -> Result<TokenData<Claims>, jsonwebtoken::e
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
     pub id: String,
+    pub name: String,
+    pub avatarPath: String,
     pub roomId: String,
+    pub isHost: bool,
+    pub userColor: String,
     pub exp: usize,
 }
