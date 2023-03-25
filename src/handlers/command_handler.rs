@@ -113,6 +113,8 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                 }
             };
 
+            lists.1.lock().unwrap().push(join_room_result.0);
+
             let mut rooms = lists.2.lock().unwrap();
             let target_room = match get_room_by_id(roomId, &mut rooms) {
                 Ok(room) => room,
@@ -142,8 +144,6 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
                 &get_room_user_list(&target_room.id, lists.1.lock().unwrap()),
                 &addr_id_pair.0,
             );
-
-            lists.1.lock().unwrap().push(join_room_result.0);
 
             info!("Successful room join for: {}", &addr_id_pair.0);
         }
