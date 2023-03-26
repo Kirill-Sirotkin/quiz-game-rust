@@ -144,17 +144,6 @@ pub fn execute_command(
                 Err(_) => (),
             };
 
-            match connection_info.2 {
-                Some(_) => (),
-                None => {
-                    let response = Response::errorReponse {
-                        errorText: "Room no longer exists".to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            }
-
             let target_room_player_max = match lists
                 .2
                 .lock()
@@ -184,16 +173,6 @@ pub fn execute_command(
                 }
                 None => (),
             };
-
-            if connection_info.2.as_ref().unwrap().current_players
-                >= connection_info.2.as_ref().unwrap().max_players
-            {
-                let response = Response::errorReponse {
-                    errorText: "Max players reached".to_string(),
-                };
-                send_message(response, &lists.0, &addr_id_pair.0);
-                return;
-            }
 
             let join_room_result = match join_room(
                 connection_info,
