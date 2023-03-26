@@ -29,12 +29,15 @@ pub fn generate_token(user: &User) -> Result<String, jsonwebtoken::errors::Error
     return token;
 }
 
-pub fn decode_token(token: &String) -> Result<TokenData<Claims>, jsonwebtoken::errors::Error> {
-    return decode::<Claims>(
+pub fn decode_token(token: &String) -> Result<TokenData<Claims>, String> {
+    match decode::<Claims>(
         &token,
         &DecodingKey::from_secret("secret".as_ref()),
         &Validation::new(Algorithm::HS256),
-    );
+    ) {
+        Ok(token) => Ok(token),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[allow(non_snake_case)]

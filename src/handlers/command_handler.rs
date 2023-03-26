@@ -1,15 +1,16 @@
 use crate::{
     handlers::game_handler::handle_game,
     helpers::get_room_user_list,
-    jwtoken::{decode_token, generate_token},
+    jwtoken::{decode_token, generate_token, Claims},
     models::{
-        communication::{Command, Response},
+        communication::{Command, CommandTokenPair, Response},
         game::*,
         lobby::{HasId, Room, User, UserColors},
     },
     server_messages::*,
 };
 use futures_channel::mpsc::UnboundedSender;
+use jsonwebtoken::TokenData;
 use log::{info, warn};
 use std::fs;
 use std::{
@@ -31,9 +32,16 @@ type ConnectionInfo<'a> = (
     Option<User>,
     Option<Room>,
     Option<(String, UnboundedSender<Message>)>,
+    Result<TokenData<Claims>, String>,
 );
 
-pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketAddr, String)) {
+pub fn execute_command(
+    command: &CommandTokenPair,
+    lists: &Lists,
+    addr_id_pair: &(SocketAddr, String),
+) {
+    let token_info = decode_token(&command.token);
+
     let users = lists.1.lock().unwrap();
     let current_user = match users.iter().find(|user| user.id == addr_id_pair.1) {
         Some(user) => Some(user.clone()),
@@ -58,15 +66,32 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
         None => None,
     };
 
-    let connection_info = (addr_id_pair, current_user, current_room, current_game);
+    let connection_info = (
+        addr_id_pair,
+        current_user,
+        current_room,
+        current_game,
+        token_info,
+    );
 
     drop(users);
     drop(rooms);
     drop(games);
 
-    match command {
+    match &command.command {
         Command::createRoom { name, avatarPath } => {
             info!("Create Room request from: {}", &addr_id_pair.0);
+
+            match connection_info.4 {
+                Ok(_) => {
+                    let response = Response::errorReponse {
+                        errorText: "Token valid".to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+                Err(_) => (),
+            };
 
             let create_room_result =
                 match create_room(&connection_info, name.to_owned(), avatarPath.to_owned()) {
@@ -96,6 +121,28 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             roomId,
         } => {
             info!("Join Room request from: {}", &addr_id_pair.0);
+
+            match connection_info.4 {
+                Ok(ref token_info) => {
+                    match lists
+                        .1
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .find(|user| user.id == token_info.claims.id)
+                    {
+                        Some(_) => {
+                            let response = Response::errorReponse {
+                                errorText: "User already active".to_string(),
+                            };
+                            send_message(response, &lists.0, &addr_id_pair.0);
+                            return;
+                        }
+                        None => (),
+                    }
+                }
+                Err(_) => (),
+            };
 
             let join_room_result = match join_room(
                 connection_info,
@@ -138,10 +185,10 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
         Command::heartbeat {} => {
             info!("Heartbeat from: {}", &addr_id_pair.0);
         }
-        Command::startGame { token, packPath } => {
+        Command::startGame { packPath } => {
             info!("Start game command from: {}", &addr_id_pair.0);
 
-            let token_info = match decode_token(token) {
+            let token_info = match connection_info.4 {
                 Ok(res) => res.claims,
                 Err(error) => {
                     let response = Response::errorReponse {
@@ -225,10 +272,10 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
 
             info!("Loading pack success");
         }
-        Command::getUserList { token } => {
+        Command::getUserList {} => {
             info!("Get user list request from: {}", &addr_id_pair.0);
 
-            let token_info = match decode_token(token) {
+            let token_info = match connection_info.4 {
                 Ok(res) => res.claims,
                 Err(error) => {
                     let response = Response::errorReponse {
@@ -248,10 +295,10 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             send_message(response, &lists.0, &addr_id_pair.0);
             info!("Successful get user list from: {}", &addr_id_pair.0);
         }
-        Command::broadcastMessage { token, text } => {
+        Command::broadcastMessage { text } => {
             info!("Broadcast to room from: {}", &addr_id_pair.0);
 
-            let token_info = match decode_token(token) {
+            let token_info = match connection_info.4 {
                 Ok(res) => res.claims,
                 Err(error) => {
                     let response = Response::errorReponse {
@@ -272,10 +319,10 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             broadcast_message_room_all(response, &lists.0, &user_list);
             info!("Successful broadcast to room from: {}", &addr_id_pair.0);
         }
-        Command::writeAnswer { token, answer } => {
+        Command::writeAnswer { answer } => {
             info!("Answer message from: {}", &addr_id_pair.0);
 
-            let _token_info = match decode_token(token) {
+            let token_info = match connection_info.4 {
                 Ok(res) => res.claims,
                 Err(error) => {
                     warn!("Error at token validation: {}", error.to_string());
@@ -324,7 +371,7 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             }
 
             let answer = GameCommand {
-                token: token.to_string(),
+                user_id: token_info.id.to_string(),
                 answer: *answer,
             };
             connection_info
@@ -336,8 +383,8 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
 
             info!("Successful answer message from: {}", &addr_id_pair.0);
         }
-        Command::changeUsername { token, newName } => {
-            let token_info = match decode_token(token) {
+        Command::changeUsername { newName } => {
+            let token_info = match connection_info.4 {
                 Ok(res) => res.claims,
                 Err(error) => {
                     warn!("Error at token validation: {}", error.to_string());
@@ -354,11 +401,8 @@ pub fn execute_command(command: &Command, lists: &Lists, addr_id_pair: &(SocketA
             })
             .unwrap();
         }
-        Command::changeAvatar {
-            token,
-            newAvatarPath,
-        } => {
-            let token_info = match decode_token(token) {
+        Command::changeAvatar { newAvatarPath } => {
+            let token_info = match connection_info.4 {
                 Ok(res) => res.claims,
                 Err(error) => {
                     warn!("Error at token validation: {}", error.to_string());
@@ -453,7 +497,7 @@ fn join_room(
     }
 }
 
-fn edit_list_element<F, T: HasId>(
+pub fn edit_list_element<F, T: HasId>(
     id: &String,
     user_list: Arc<Mutex<Vec<T>>>,
     mut function: F,

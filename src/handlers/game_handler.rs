@@ -41,7 +41,7 @@ pub async fn handle_game(lists: Lists, user_list: Vec<User>, room_id: String, pa
 
     let receive_future = rx_room.for_each(|msg| {
         match parse_game_command(&msg) {
-            Ok(command) => match answers.lock().unwrap().get_mut(&command.0.id) {
+            Ok(command) => match answers.lock().unwrap().get_mut(&command.0) {
                 Some(user_answer) => *user_answer = command.1,
                 None => (),
             },

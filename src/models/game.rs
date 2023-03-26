@@ -24,45 +24,6 @@ pub struct Pack {
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize)]
 pub struct GameCommand {
-    pub token: String,
+    pub user_id: String,
     pub answer: i32,
-}
-
-pub fn test_pack() -> Pack {
-    let pack = Pack {
-        name: "test pack".to_string(),
-        questions: vec![
-            Question {
-                text: "Is a1 correct?".to_string(),
-                answers: vec![
-                    Answer {
-                        number: 1,
-                        text: "A1".to_string(),
-                    },
-                    Answer {
-                        number: 2,
-                        text: "A2".to_string(),
-                    },
-                ],
-                correct_answer: 1,
-                duration_sec: 15,
-            },
-            Question {
-                text: "Is a2 correct?".to_string(),
-                answers: vec![
-                    Answer {
-                        number: 1,
-                        text: "A1".to_string(),
-                    },
-                    Answer {
-                        number: 2,
-                        text: "A2".to_string(),
-                    },
-                ],
-                correct_answer: 2,
-                duration_sec: 15,
-            },
-        ],
-    };
-    return pack;
 }

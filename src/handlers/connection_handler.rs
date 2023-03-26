@@ -1,11 +1,11 @@
 use crate::{
     handlers::command_handler::execute_command,
-    helpers::parse_command,
+    helpers::{get_room_user_list, parse_command},
     models::{
         communication::Response,
         lobby::{Room, User},
     },
-    server_messages::send_message,
+    server_messages::{broadcast_message_room_all, send_message},
 };
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
@@ -67,12 +67,26 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
     info!("{} disconnected", &addr_id_pair.0);
 
     let mut users = lists.1.lock().unwrap();
+    let room_id = match users.iter().find(|user| user.id == addr_id_pair.1) {
+        Some(user) => Some(user.roomId.clone()),
+        None => None,
+    };
     match users.iter().position(|user| user.id == addr_id_pair.1) {
         Some(index) => {
             users.remove(index);
-            ();
+        }
+        None => (),
+    };
+    lists.0.lock().unwrap().remove(&addr_id_pair);
+
+    match room_id {
+        Some(id) => {
+            let user_list = get_room_user_list(&id, lists.1.lock().unwrap());
+            let user_disconnect_response = Response::updateUserList {
+                userList: user_list.clone(),
+            };
+            broadcast_message_room_all(user_disconnect_response, &lists.0, &user_list)
         }
         None => (),
     }
-    lists.0.lock().unwrap().remove(&addr_id_pair);
 }

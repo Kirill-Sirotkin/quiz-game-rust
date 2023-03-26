@@ -1,12 +1,13 @@
+#![allow(non_camel_case_types, non_snake_case)]
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
 use super::{game::Answer, lobby::User};
 
-#[allow(non_snake_case)]
-#[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize)]
+#[serde(tag = "response", content = "data")]
 pub enum Response {
     createRoomResponse {
         token: String,
@@ -45,9 +46,7 @@ pub enum Response {
     },
 }
 
-#[allow(non_snake_case)]
-#[allow(non_camel_case_types)]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Command {
     createRoom {
         name: String,
@@ -60,26 +59,26 @@ pub enum Command {
     },
     heartbeat {},
     startGame {
-        token: String,
         packPath: String,
     },
-    getUserList {
-        token: String,
-    },
+    getUserList {},
     broadcastMessage {
-        token: String,
         text: String,
     },
     writeAnswer {
-        token: String,
         answer: i32,
     },
     changeUsername {
-        token: String,
         newName: String,
     },
     changeAvatar {
-        token: String,
         newAvatarPath: String,
     },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CommandTokenPair {
+    #[serde(flatten)]
+    pub command: Command,
+    pub token: String,
 }
