@@ -155,6 +155,36 @@ pub fn execute_command(
                 }
             }
 
+            let target_room_player_max = match lists
+                .2
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|room| &room.id == roomId)
+            {
+                Some(room) => Some(room.max_players),
+                None => todo!(),
+            };
+
+            match lists
+                .2
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|room| &room.id == roomId)
+            {
+                Some(room) => {
+                    if room.current_players >= target_room_player_max.unwrap() {
+                        let response = Response::errorReponse {
+                            errorText: "Max players reached".to_string(),
+                        };
+                        send_message(response, &lists.0, &addr_id_pair.0);
+                        return;
+                    }
+                }
+                None => (),
+            };
+
             if connection_info.2.as_ref().unwrap().current_players
                 >= connection_info.2.as_ref().unwrap().max_players
             {
