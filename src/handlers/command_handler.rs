@@ -144,6 +144,17 @@ pub fn execute_command(
                 Err(_) => (),
             };
 
+            match connection_info.2 {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "Room no longer exists".to_string(),
+                    };
+                    send_message(response, &lists.0, &addr_id_pair.0);
+                    return;
+                }
+            }
+
             if connection_info.2.as_ref().unwrap().current_players
                 >= connection_info.2.as_ref().unwrap().max_players
             {
