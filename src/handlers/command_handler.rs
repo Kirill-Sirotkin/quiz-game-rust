@@ -144,6 +144,16 @@ pub fn execute_command(
                 Err(_) => (),
             };
 
+            if connection_info.2.as_ref().unwrap().current_players
+                >= connection_info.2.as_ref().unwrap().max_players
+            {
+                let response = Response::errorReponse {
+                    errorText: "Max players reached".to_string(),
+                };
+                send_message(response, &lists.0, &addr_id_pair.0);
+                return;
+            }
+
             let join_room_result = match join_room(
                 connection_info,
                 name.to_owned(),
@@ -161,6 +171,13 @@ pub fn execute_command(
             };
 
             lists.1.lock().unwrap().push(join_room_result.0);
+
+            match edit_list_element(roomId, lists.2.clone(), |room| {
+                room.current_players += 1;
+            }) {
+                Ok(_) => (),
+                Err(error) => warn!("Could not ad user to room: {}", error),
+            };
 
             let response = Response::joinRoomResponse {
                 token: join_room_result.1,
@@ -499,16 +516,16 @@ fn join_room(
 
 pub fn edit_list_element<F, T: HasId>(
     id: &String,
-    user_list: Arc<Mutex<Vec<T>>>,
+    list: Arc<Mutex<Vec<T>>>,
     mut function: F,
 ) -> Result<(), String>
 where
     F: FnMut(&mut T),
 {
-    let mut users = user_list.lock().unwrap();
+    let mut users = list.lock().unwrap();
     let target_user = match users.iter_mut().find(|user| &user.get_id() == id) {
         Some(user) => user,
-        None => return Err("User does not exist".to_string()),
+        None => return Err("Item does not exist in list".to_string()),
     };
 
     function(target_user);

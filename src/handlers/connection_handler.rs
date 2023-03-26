@@ -1,5 +1,5 @@
 use crate::{
-    handlers::command_handler::execute_command,
+    handlers::command_handler::{edit_list_element, execute_command},
     helpers::{get_room_user_list, parse_command},
     models::{
         communication::Response,
@@ -85,7 +85,36 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
             let user_disconnect_response = Response::updateUserList {
                 userList: user_list.clone(),
             };
-            broadcast_message_room_all(user_disconnect_response, &lists.0, &user_list)
+            match edit_list_element(&id, lists.2.clone(), |room| {
+                room.current_players -= 1;
+            }) {
+                Ok(_) => (),
+                Err(error) => warn!("Could not remove user from room: {}", error),
+            };
+            broadcast_message_room_all(user_disconnect_response, &lists.0, &user_list);
+
+            let room_players = match lists.2.lock().unwrap().iter().find(|room| room.id == id) {
+                Some(room) => {
+                    let index = lists
+                        .2
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .position(|room| room.id == id)
+                        .unwrap();
+                    Some((room.current_players, index))
+                }
+                None => None,
+            };
+
+            match room_players {
+                Some(players) => {
+                    if players.0 <= 0 {
+                        lists.2.lock().unwrap().remove(players.1);
+                    }
+                }
+                None => (),
+            };
         }
         None => (),
     }
