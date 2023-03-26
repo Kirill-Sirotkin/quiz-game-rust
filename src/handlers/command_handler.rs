@@ -152,7 +152,7 @@ pub fn execute_command(
                 .find(|room| &room.id == roomId)
             {
                 Some(room) => Some(room.max_players),
-                None => todo!(),
+                None => None,
             };
 
             match lists
