@@ -18,19 +18,19 @@ type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 
 pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
-    Delay::new(Duration::from_secs(10)).await;
+    Delay::new(Duration::from_secs(2)).await;
 
     let room_info = get_list_element(&room_id, room_list.clone()).unwrap();
     if room_info.current_players <= 0 {
         println!("Removing room: {}", &room_id);
         info!("Removing room: {}", &room_id);
 
-        match room_list
+        let index = room_list
             .lock()
             .unwrap()
             .iter()
-            .position(|room| room.id == room_id)
-        {
+            .position(|room| room.id == room_id);
+        match index {
             Some(index) => {
                 room_list.lock().unwrap().remove(index);
             }
@@ -42,18 +42,19 @@ pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
 }
 
 pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map: PeerMap) {
-    Delay::new(Duration::from_secs(1)).await;
+    Delay::new(Duration::from_secs(2)).await;
 
     if !peer_map.lock().unwrap().contains_key(&user_id) {
         println!("Removing user: {}", &user_id);
         info!("Removing user: {}", &user_id);
 
-        match user_list
+        let index = user_list
             .lock()
             .unwrap()
             .iter()
-            .position(|user| user.id == user_id)
-        {
+            .position(|user| user.id == user_id);
+
+        match index {
             Some(index) => {
                 user_list.lock().unwrap().remove(index);
             }
