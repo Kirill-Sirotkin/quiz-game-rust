@@ -40,7 +40,6 @@ impl HasId for Room {
 
 pub enum UserColors {
     Black,
-    White,
     Yellow,
     Blue,
     Red,
@@ -55,7 +54,6 @@ impl UserColors {
     pub fn value(&self) -> String {
         match *self {
             UserColors::Black => "#000000".to_string(),
-            UserColors::White => "#FFFFFF".to_string(),
             UserColors::Yellow => "#FFFF00".to_string(),
             UserColors::Blue => "#00FFFF".to_string(),
             UserColors::Red => "#FF0000".to_string(),
@@ -71,15 +69,14 @@ impl UserColors {
 impl Distribution<UserColors> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> UserColors {
         match rng.gen_range(0..=9) {
-            0 => UserColors::White,
-            1 => UserColors::Yellow,
-            2 => UserColors::Blue,
-            3 => UserColors::Black,
-            4 => UserColors::Green,
-            5 => UserColors::Purple,
-            6 => UserColors::Brown,
-            7 => UserColors::Orange,
-            8 => UserColors::Cyan,
+            0 => UserColors::Yellow,
+            1 => UserColors::Blue,
+            2 => UserColors::Black,
+            3 => UserColors::Green,
+            4 => UserColors::Purple,
+            5 => UserColors::Brown,
+            6 => UserColors::Orange,
+            7 => UserColors::Cyan,
             _ => UserColors::Red,
         }
     }
