@@ -461,6 +461,7 @@ pub fn execute_unauthorized_command(
                 Some(_) => {
                     let response = Response::errorReponse {
                         errorText: "User already exists".to_string(),
+                        errorCode: 1,
                     };
                     send_message(response, lists.0.clone(), &connection_id);
                     return;
@@ -480,7 +481,10 @@ pub fn execute_unauthorized_command(
                     send_message(response, lists.0.clone(), &connection_id);
                 }
                 Err(error) => {
-                    let response = Response::errorReponse { errorText: error };
+                    let response = Response::errorReponse {
+                        errorText: error,
+                        errorCode: 1,
+                    };
                     send_message(response, lists.0.clone(), &connection_id);
                     return;
                 }
@@ -496,6 +500,7 @@ pub fn execute_unauthorized_command(
                 Some(_) => {
                     let response = Response::errorReponse {
                         errorText: "User already exists".to_string(),
+                        errorCode: 1,
                     };
                     send_message(response, lists.0.clone(), &connection_id);
                     return;
@@ -509,6 +514,7 @@ pub fn execute_unauthorized_command(
                 None => {
                     let response = Response::errorReponse {
                         errorText: "Room does not exist".to_string(),
+                        errorCode: 1,
                     };
                     send_message(response, lists.0.clone(), &connection_id);
                     return;
@@ -519,6 +525,7 @@ pub fn execute_unauthorized_command(
             if room.current_players >= room.max_players {
                 let response = Response::errorReponse {
                     errorText: "Room is full".to_string(),
+                    errorCode: 1,
                 };
                 send_message(response, lists.0.clone(), &connection_id);
                 return;
@@ -528,6 +535,7 @@ pub fn execute_unauthorized_command(
             if lists.3.lock().unwrap().contains_key(&roomId) {
                 let response = Response::errorReponse {
                     errorText: "Game is in progress".to_string(),
+                    errorCode: 1,
                 };
                 send_message(response, lists.0.clone(), &connection_id);
                 return;
@@ -545,7 +553,10 @@ pub fn execute_unauthorized_command(
                     ) {
                         Ok(list) => list,
                         Err(error) => {
-                            let response = Response::errorReponse { errorText: error };
+                            let response = Response::errorReponse {
+                                errorText: error,
+                                errorCode: 1,
+                            };
                             send_message(response, lists.0.clone(), &connection_id);
                             return;
                         }
@@ -558,7 +569,10 @@ pub fn execute_unauthorized_command(
                     send_message(token_response, lists.0.clone(), &connection_id);
                 }
                 Err(error) => {
-                    let response = Response::errorReponse { errorText: error };
+                    let response = Response::errorReponse {
+                        errorText: error,
+                        errorCode: 1,
+                    };
                     send_message(response, lists.0.clone(), &connection_id);
                     return;
                 }
@@ -579,7 +593,10 @@ pub fn execute_authorized_command(
     let token_info = match decode_token(&command_token_pair.token) {
         Ok(info) => info.claims,
         Err(error) => {
-            let response = Response::errorReponse { errorText: error };
+            let response = Response::errorReponse {
+                errorText: error,
+                errorCode: 0,
+            };
             send_message(response, lists.0.clone(), &connection_id);
             return;
         }
@@ -591,6 +608,7 @@ pub fn execute_authorized_command(
             if lists.0.lock().unwrap().contains_key(&token_info.id) {
                 let response = Response::errorReponse {
                     errorText: "User already active".to_string(),
+                    errorCode: 1,
                 };
                 send_message(response, lists.0.clone(), &connection_id);
                 return;
@@ -602,6 +620,7 @@ pub fn execute_authorized_command(
                 None => {
                     let response = Response::errorReponse {
                         errorText: "Cannot find connection channel".to_string(),
+                        errorCode: 1,
                     };
                     send_message(response, lists.0.clone(), &connection_id);
                     return;
@@ -624,7 +643,10 @@ pub fn execute_authorized_command(
             ) {
                 Ok(list) => list,
                 Err(error) => {
-                    let response = Response::errorReponse { errorText: error };
+                    let response = Response::errorReponse {
+                        errorText: error,
+                        errorCode: 1,
+                    };
                     send_message(response, lists.0.clone(), &connection_id);
                     return;
                 }

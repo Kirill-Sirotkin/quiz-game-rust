@@ -75,6 +75,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                 warn!("Error parsing command!: {}", error);
                 let response = Response::errorReponse {
                     errorText: error.to_string(),
+                    errorCode: 1,
                 };
                 send_message(response, lists.0.clone(), &connection_id);
             }

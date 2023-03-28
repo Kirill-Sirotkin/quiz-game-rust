@@ -26,6 +26,7 @@ pub enum Response {
     startGame {},
     errorReponse {
         errorText: String,
+        errorCode: i32,
     },
     questionResponse {
         question: String,
