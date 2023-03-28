@@ -1,8 +1,11 @@
 use crate::{
-    handlers::command_handler::{edit_list_element, execute_command},
-    helpers::{get_room_user_list, parse_command},
+    handlers::{
+        command_handler::{execute_authorized_command, execute_unauthorized_command},
+        room_handler::handle_room_timeout,
+    },
+    helpers::{edit_list_element, get_list_element, get_room_user_list, parse_command},
     models::{
-        communication::Response,
+        communication::{Command, Response},
         lobby::{Room, User},
     },
     server_messages::{broadcast_message_room_all, send_message},
@@ -20,15 +23,14 @@ use tungstenite::Message;
 use uuid::Uuid;
 
 type Tx = UnboundedSender<Message>;
-type PeerMap = Arc<Mutex<HashMap<(SocketAddr, String), Tx>>>;
+type PeerMap = Arc<Mutex<HashMap<String, Tx>>>;
 type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;
 type Lists = (PeerMap, UserList, RoomList, GameList);
 
 pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: SocketAddr) {
-    let addr_id_pair = (addr, Uuid::new_v4().to_string());
-    info!("Incoming TCP connection from: {}", addr_id_pair.0);
+    info!("Incoming TCP connection from: {}", &addr);
 
     let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
         Ok(stream) => stream,
@@ -37,22 +39,44 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
             return;
         }
     };
-    info!("WebSocket connection established: {}", addr_id_pair.0);
+    info!("WebSocket connection established: {}", &addr);
 
+    let connection_id = Uuid::new_v4().to_string();
     let (tx, rx) = unbounded();
-    lists.0.lock().unwrap().insert(addr_id_pair.clone(), tx);
+    lists.0.lock().unwrap().insert(connection_id.clone(), tx);
 
     let (outgoing, incoming) = ws_stream.split();
 
     let broadcast_incoming = incoming.try_for_each(|msg| {
         match parse_command(&msg) {
-            Ok(command) => execute_command(&command, &lists, &addr_id_pair),
+            Ok(command) => match command {
+                Command::UnauthorizedCommand(command) => execute_unauthorized_command(
+                    command,
+                    (
+                        lists.0.clone(),
+                        lists.1.clone(),
+                        lists.2.clone(),
+                        lists.3.clone(),
+                    ),
+                    &connection_id,
+                ),
+                Command::CommandTokenPair(command) => execute_authorized_command(
+                    command,
+                    (
+                        lists.0.clone(),
+                        lists.1.clone(),
+                        lists.2.clone(),
+                        lists.3.clone(),
+                    ),
+                    &connection_id,
+                ),
+            },
             Err(error) => {
                 warn!("Error parsing command!: {}", error);
                 let response = Response::errorReponse {
                     errorText: error.to_string(),
                 };
-                send_message(response, &lists.0, &addr_id_pair.0);
+                send_message(response, lists.0.clone(), &connection_id);
             }
         }
 
@@ -64,61 +88,82 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
     pin_mut!(broadcast_incoming, receive_from_others);
     future::select(broadcast_incoming, receive_from_others).await;
 
-    info!("{} disconnected", &addr_id_pair.0);
+    info!("{} disconnected", &addr);
 
     let mut users = lists.1.lock().unwrap();
-    let room_id = match users.iter().find(|user| user.id == addr_id_pair.1) {
+    let room_id = match users.iter().find(|user| user.id == connection_id) {
         Some(user) => Some(user.roomId.clone()),
         None => None,
     };
-    match users.iter().position(|user| user.id == addr_id_pair.1) {
+    match users.iter().position(|user| user.id == connection_id) {
         Some(index) => {
             users.remove(index);
         }
         None => (),
     };
-    lists.0.lock().unwrap().remove(&addr_id_pair);
+    lists.0.lock().unwrap().remove(&connection_id);
 
     drop(users);
 
     match room_id {
-        Some(id) => {
-            let user_list = get_room_user_list(&id, lists.1.lock().unwrap());
-            let user_disconnect_response = Response::updateUserList {
+        Some(room_id) => {
+            edit_list_element(&room_id, lists.2.clone(), |room| {
+                room.current_players -= 1;
+            })
+            .unwrap();
+
+            let user_list = get_room_user_list(&room_id, lists.1.clone());
+            let update_user_list_response = Response::updateUserList {
                 userList: user_list.clone(),
             };
-            match edit_list_element(&id, lists.2.clone(), |room| {
-                room.current_players -= 1;
-            }) {
-                Ok(_) => (),
-                Err(error) => warn!("Could not remove user from room: {}", error),
-            };
-            broadcast_message_room_all(user_disconnect_response, &lists.0, &user_list);
+            broadcast_message_room_all(update_user_list_response, lists.0.clone(), &user_list);
 
-            let room_players = match lists.2.lock().unwrap().iter().find(|room| room.id == id) {
-                Some(room) => Some(room.current_players),
-                None => None,
-            };
-
-            let room_index = match lists
-                .2
-                .lock()
-                .unwrap()
-                .iter()
-                .position(|room| room.id == id)
-            {
-                Some(index) => Some(index),
-                None => None,
-            };
-            match room_players {
-                Some(players) => {
-                    if players <= 0 {
-                        lists.2.lock().unwrap().remove(room_index.unwrap());
-                    }
-                }
-                None => (),
-            };
+            let room_info = get_list_element(&room_id, lists.2.clone()).unwrap();
+            if room_info.current_players <= 0 {
+                tokio::spawn(handle_room_timeout(room_id.clone(), lists.2.clone()));
+            }
         }
         None => (),
     }
+
+    // match room_id {
+    //     Some(id) => {
+    //         let user_list = get_room_user_list(&id, lists.1.lock().unwrap());
+    //         let user_disconnect_response = Response::updateUserList {
+    //             userList: user_list.clone(),
+    //         };
+    //         match edit_list_element(&id, lists.2.clone(), |room| {
+    //             room.current_players -= 1;
+    //         }) {
+    //             Ok(_) => (),
+    //             Err(error) => warn!("Could not remove user from room: {}", error),
+    //         };
+    //         broadcast_message_room_all(user_disconnect_response, &lists.0, &user_list);
+
+    //         let room_players = match lists.2.lock().unwrap().iter().find(|room| room.id == id) {
+    //             Some(room) => Some(room.current_players),
+    //             None => None,
+    //         };
+
+    //         let room_index = match lists
+    //             .2
+    //             .lock()
+    //             .unwrap()
+    //             .iter()
+    //             .position(|room| room.id == id)
+    //         {
+    //             Some(index) => Some(index),
+    //             None => None,
+    //         };
+    //         match room_players {
+    //             Some(players) => {
+    //                 if players <= 0 {
+    //                     lists.2.lock().unwrap().remove(room_index.unwrap());
+    //                 }
+    //             }
+    //             None => (),
+    //         };
+    //     }
+    //     None => (),
+    // }
 }

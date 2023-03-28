@@ -1,9 +1,9 @@
 use crate::{
     handlers::game_handler::handle_game,
-    helpers::get_room_user_list,
+    helpers::{edit_list_element, get_list_element, get_room_user_list},
     jwtoken::{decode_token, generate_token, Claims},
     models::{
-        communication::{Command, CommandTokenPair, Response},
+        communication::{AuthorizedCommand, CommandTokenPair, Response, UnauthorizedCommand},
         game::*,
         lobby::{HasId, Room, User, UserColors},
     },
@@ -22,7 +22,7 @@ use tungstenite::protocol::Message;
 use uuid::Uuid;
 
 type Tx = UnboundedSender<Message>;
-type PeerMap = Arc<Mutex<HashMap<(SocketAddr, String), Tx>>>;
+type PeerMap = Arc<Mutex<HashMap<String, Tx>>>;
 type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;
@@ -35,450 +35,585 @@ type ConnectionInfo<'a> = (
     Result<TokenData<Claims>, String>,
 );
 
-pub fn execute_command(
-    command: &CommandTokenPair,
-    lists: &Lists,
-    addr_id_pair: &(SocketAddr, String),
+// pub fn execute_command(command: &CommandTokenPair, lists: Lists, addr: &SocketAddr) {
+//     let token_info = decode_token(&command.token);
+
+//     let users = lists.1.lock().unwrap();
+//     let current_user = match users.iter().find(|user| user.id == addr.1) {
+//         Some(user) => Some(user.clone()),
+//         None => None,
+//     };
+
+//     let rooms = lists.2.lock().unwrap();
+//     let current_room = match current_user {
+//         Some(ref user) => match rooms.iter().find(|room| room.id == user.roomId) {
+//             Some(room) => Some(room.clone()),
+//             None => None,
+//         },
+//         None => None,
+//     };
+
+//     let games = lists.3.lock().unwrap();
+//     let current_game = match current_room {
+//         Some(ref room) => match games.iter().find(|game| game.0 == &room.id) {
+//             Some(game) => Some((game.0.clone(), game.1.clone())),
+//             None => None,
+//         },
+//         None => None,
+//     };
+
+//     let connection_info = (addr, current_user, current_room, current_game, token_info);
+
+//     drop(users);
+//     drop(rooms);
+//     drop(games);
+
+//     match &command.command {
+//         Command::createRoom { name, avatarPath } => {
+//             info!("Create Room request from: {}", &addr.0);
+
+//             match connection_info.4 {
+//                 Ok(_) => {
+//                     let response = Response::errorReponse {
+//                         errorText: "Token valid".to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//                 Err(_) => (),
+//             };
+
+//             let create_room_result =
+//                 match create_room(&connection_info, name.to_owned(), avatarPath.to_owned()) {
+//                     Ok(res) => res,
+//                     Err(err) => {
+//                         let response = Response::errorReponse {
+//                             errorText: err.to_string(),
+//                         };
+//                         send_message(response, &lists.0, &addr.0);
+//                         return;
+//                     }
+//                 };
+
+//             let response = Response::createRoomResponse {
+//                 token: create_room_result.1,
+//             };
+
+//             lists.1.lock().unwrap().push(create_room_result.0);
+//             lists.2.lock().unwrap().push(create_room_result.2);
+
+//             send_message(response, &lists.0, &addr.0);
+//             info!("Successful room creation for: {}", &addr.0);
+//         }
+//         Command::joinRoom {
+//             name,
+//             avatarPath,
+//             roomId,
+//         } => {
+//             info!("Join Room request from: {}", &addr.0);
+
+//             match connection_info.4 {
+//                 Ok(ref token_info) => {
+//                     match lists
+//                         .1
+//                         .lock()
+//                         .unwrap()
+//                         .iter()
+//                         .find(|user| user.id == token_info.claims.id)
+//                     {
+//                         Some(_) => {
+//                             let response = Response::errorReponse {
+//                                 errorText: "User already active".to_string(),
+//                             };
+//                             send_message(response, &lists.0, &addr.0);
+//                             return;
+//                         }
+//                         None => (),
+//                     }
+//                 }
+//                 Err(_) => (),
+//             };
+
+//             let target_room_player_max = match lists
+//                 .2
+//                 .lock()
+//                 .unwrap()
+//                 .iter()
+//                 .find(|room| &room.id == roomId)
+//             {
+//                 Some(room) => Some(room.max_players),
+//                 None => None,
+//             };
+
+//             match lists
+//                 .2
+//                 .lock()
+//                 .unwrap()
+//                 .iter()
+//                 .find(|room| &room.id == roomId)
+//             {
+//                 Some(room) => {
+//                     if room.current_players >= target_room_player_max.unwrap() {
+//                         let response = Response::errorReponse {
+//                             errorText: "Max players reached".to_string(),
+//                         };
+//                         send_message(response, &lists.0, &addr.0);
+//                         return;
+//                     }
+//                 }
+//                 None => (),
+//             };
+
+//             let join_room_result = match join_room(
+//                 connection_info,
+//                 name.to_owned(),
+//                 avatarPath.to_owned(),
+//                 roomId.to_owned(),
+//             ) {
+//                 Ok(res) => res,
+//                 Err(err) => {
+//                     let response = Response::errorReponse {
+//                         errorText: err.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             lists.1.lock().unwrap().push(join_room_result.0);
+
+//             match edit_list_element(roomId, lists.2.clone(), |room| {
+//                 room.current_players += 1;
+//             }) {
+//                 Ok(_) => (),
+//                 Err(error) => warn!("Could not ad user to room: {}", error),
+//             };
+
+//             let response = Response::joinRoomResponse {
+//                 token: join_room_result.1,
+//                 userList: get_room_user_list(&roomId, lists.1.lock().unwrap()),
+//             };
+
+//             send_message(response, &lists.0, &addr.0);
+
+//             let broadcast_response = Response::updateUserList {
+//                 userList: get_room_user_list(&roomId, lists.1.lock().unwrap()),
+//             };
+
+//             broadcast_message_room_except(
+//                 broadcast_response,
+//                 &lists.0,
+//                 &get_room_user_list(&roomId, lists.1.lock().unwrap()),
+//                 &addr.0,
+//             );
+
+//             info!("Successful room join for: {}", &addr.0);
+//         }
+//         Command::heartbeat {} => {
+//             info!("Heartbeat from: {}", &addr.0);
+//         }
+//         Command::startGame { packPath } => {
+//             info!("Start game command from: {}", &addr.0);
+
+//             let token_info = match connection_info.4 {
+//                 Ok(res) => res.claims,
+//                 Err(error) => {
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             match connection_info.1 {
+//                 Some(_) => (),
+//                 None => {
+//                     let response = Response::errorReponse {
+//                         errorText: "User does not exist".to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             }
+
+//             match connection_info.3 {
+//                 Some(_) => {
+//                     let response = Response::errorReponse {
+//                         errorText: "Game already in progress".to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//                 None => (),
+//             }
+
+//             if !connection_info.1.unwrap().isHost {
+//                 let response = Response::errorReponse {
+//                     errorText: "Only host can start the game".to_string(),
+//                 };
+//                 send_message(response, &lists.0, &addr.0);
+//                 return;
+//             }
+
+//             let broadcast_response = Response::startGame {};
+//             broadcast_message_room_all(
+//                 broadcast_response,
+//                 &lists.0,
+//                 &get_room_user_list(&token_info.roomId.clone(), lists.1.lock().unwrap()),
+//             );
+
+//             // previously: fs::read_to_string("./packs/test.json")
+//             let data = match fs::read_to_string(packPath) {
+//                 Ok(data) => data,
+//                 Err(error) => {
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+//             let pack: Pack = match serde_json::from_str(&data) {
+//                 Ok(pack) => pack,
+//                 Err(error) => {
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             tokio::spawn(handle_game(
+//                 (
+//                     lists.0.clone(),
+//                     lists.1.clone(),
+//                     lists.2.clone(),
+//                     lists.3.clone(),
+//                 ),
+//                 get_room_user_list(&token_info.roomId.clone(), lists.1.lock().unwrap()),
+//                 connection_info.2.unwrap().id.clone(),
+//                 pack,
+//             ));
+
+//             info!("Loading pack success");
+//         }
+//         Command::getUserList {} => {
+//             info!("Get user list request from: {}", &addr.0);
+
+//             let token_info = match connection_info.4 {
+//                 Ok(res) => res.claims,
+//                 Err(error) => {
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             let user_list = get_room_user_list(&token_info.roomId, lists.1.lock().unwrap());
+
+//             let response = Response::updateUserList {
+//                 userList: user_list,
+//             };
+
+//             send_message(response, &lists.0, &addr.0);
+//             info!("Successful get user list from: {}", &addr.0);
+//         }
+//         Command::broadcastMessage { text } => {
+//             info!("Broadcast to room from: {}", &addr.0);
+
+//             let token_info = match connection_info.4 {
+//                 Ok(res) => res.claims,
+//                 Err(error) => {
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             let response = Response::newMessage {
+//                 text: text.to_owned(),
+//                 author: token_info.id,
+//             };
+
+//             let user_list = get_room_user_list(&token_info.roomId, lists.1.lock().unwrap());
+
+//             broadcast_message_room_all(response, &lists.0, &user_list);
+//             info!("Successful broadcast to room from: {}", &addr.0);
+//         }
+//         Command::writeAnswer { answer } => {
+//             info!("Answer message from: {}", &addr.0);
+
+//             let token_info = match connection_info.4 {
+//                 Ok(res) => res.claims,
+//                 Err(error) => {
+//                     warn!("Error at token validation: {}", error.to_string());
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             match connection_info.1 {
+//                 Some(_) => (),
+//                 None => {
+//                     warn!("User does not exist");
+//                     let response = Response::errorReponse {
+//                         errorText: "User does not exist".to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             }
+
+//             match connection_info.2 {
+//                 Some(_) => (),
+//                 None => {
+//                     warn!("Room does not exist");
+//                     let response = Response::errorReponse {
+//                         errorText: "Room does not exist".to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             }
+
+//             match connection_info.3 {
+//                 Some(_) => (),
+//                 None => {
+//                     warn!("Game does not exist");
+//                     let response = Response::errorReponse {
+//                         errorText: "Game does not exist".to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             }
+
+//             let answer = GameCommand {
+//                 user_id: token_info.id.to_string(),
+//                 answer: *answer,
+//             };
+//             connection_info
+//                 .3
+//                 .unwrap()
+//                 .1
+//                 .unbounded_send(Message::Text(serde_json::to_string(&answer).unwrap()))
+//                 .unwrap();
+
+//             info!("Successful answer message from: {}", &addr.0);
+//         }
+//         Command::changeUsername { newName } => {
+//             let token_info = match connection_info.4 {
+//                 Ok(res) => res.claims,
+//                 Err(error) => {
+//                     warn!("Error at token validation: {}", error.to_string());
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             edit_list_element(&token_info.id, lists.1.clone(), |user| {
+//                 user.name = newName.clone();
+//             })
+//             .unwrap();
+//         }
+//         Command::changeAvatar { newAvatarPath } => {
+//             let token_info = match connection_info.4 {
+//                 Ok(res) => res.claims,
+//                 Err(error) => {
+//                     warn!("Error at token validation: {}", error.to_string());
+//                     let response = Response::errorReponse {
+//                         errorText: error.to_string(),
+//                     };
+//                     send_message(response, &lists.0, &addr.0);
+//                     return;
+//                 }
+//             };
+
+//             edit_list_element(&token_info.id, lists.1.clone(), |user| {
+//                 user.avatarPath = newAvatarPath.clone();
+//             })
+//             .unwrap();
+//         }
+//     }
+// }
+
+pub fn execute_unauthorized_command(
+    command: UnauthorizedCommand,
+    lists: Lists,
+    connection_id: &String,
 ) {
-    let token_info = decode_token(&command.token);
-
-    let users = lists.1.lock().unwrap();
-    let current_user = match users.iter().find(|user| user.id == addr_id_pair.1) {
-        Some(user) => Some(user.clone()),
-        None => None,
-    };
-
-    let rooms = lists.2.lock().unwrap();
-    let current_room = match current_user {
-        Some(ref user) => match rooms.iter().find(|room| room.id == user.roomId) {
-            Some(room) => Some(room.clone()),
-            None => None,
-        },
-        None => None,
-    };
-
-    let games = lists.3.lock().unwrap();
-    let current_game = match current_room {
-        Some(ref room) => match games.iter().find(|game| game.0 == &room.id) {
-            Some(game) => Some((game.0.clone(), game.1.clone())),
-            None => None,
-        },
-        None => None,
-    };
-
-    let connection_info = (
-        addr_id_pair,
-        current_user,
-        current_room,
-        current_game,
-        token_info,
-    );
-
-    drop(users);
-    drop(rooms);
-    drop(games);
-
-    match &command.command {
-        Command::createRoom { name, avatarPath } => {
-            info!("Create Room request from: {}", &addr_id_pair.0);
-
-            match connection_info.4 {
-                Ok(_) => {
+    match command {
+        UnauthorizedCommand::createRoom { name, avatarPath } => {
+            // Return error if user exists
+            match get_list_element(&connection_id, lists.1.clone()) {
+                Some(_) => {
                     let response = Response::errorReponse {
-                        errorText: "Token valid".to_string(),
+                        errorText: "User already exists".to_string(),
                     };
-                    send_message(response, &lists.0, &addr_id_pair.0);
+                    send_message(response, lists.0.clone(), &connection_id);
                     return;
                 }
-                Err(_) => (),
-            };
+                None => (),
+            }
 
-            let create_room_result =
-                match create_room(&connection_info, name.to_owned(), avatarPath.to_owned()) {
-                    Ok(res) => res,
-                    Err(err) => {
-                        let response = Response::errorReponse {
-                            errorText: err.to_string(),
-                        };
-                        send_message(response, &lists.0, &addr_id_pair.0);
-                        return;
-                    }
-                };
+            // Try create user, token and room and handle it
+            match create_room(connection_id, name, avatarPath) {
+                Ok(create_room) => {
+                    lists.1.lock().unwrap().push(create_room.0);
+                    lists.2.lock().unwrap().push(create_room.2);
 
-            let response = Response::createRoomResponse {
-                token: create_room_result.1,
-            };
-
-            lists.1.lock().unwrap().push(create_room_result.0);
-            lists.2.lock().unwrap().push(create_room_result.2);
-
-            send_message(response, &lists.0, &addr_id_pair.0);
-            info!("Successful room creation for: {}", &addr_id_pair.0);
+                    let response = Response::createRoomResponse {
+                        token: create_room.1,
+                    };
+                    send_message(response, lists.0.clone(), &connection_id);
+                }
+                Err(error) => {
+                    let response = Response::errorReponse { errorText: error };
+                    send_message(response, lists.0.clone(), &connection_id);
+                    return;
+                }
+            }
         }
-        Command::joinRoom {
+        UnauthorizedCommand::joinRoom {
             name,
             avatarPath,
             roomId,
         } => {
-            info!("Join Room request from: {}", &addr_id_pair.0);
-
-            match connection_info.4 {
-                Ok(ref token_info) => {
-                    match lists
-                        .1
-                        .lock()
-                        .unwrap()
-                        .iter()
-                        .find(|user| user.id == token_info.claims.id)
-                    {
-                        Some(_) => {
-                            let response = Response::errorReponse {
-                                errorText: "User already active".to_string(),
-                            };
-                            send_message(response, &lists.0, &addr_id_pair.0);
-                            return;
-                        }
-                        None => (),
-                    }
-                }
-                Err(_) => (),
-            };
-
-            let target_room_player_max = match lists
-                .2
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|room| &room.id == roomId)
-            {
-                Some(room) => Some(room.max_players),
-                None => None,
-            };
-
-            match lists
-                .2
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|room| &room.id == roomId)
-            {
-                Some(room) => {
-                    if room.current_players >= target_room_player_max.unwrap() {
-                        let response = Response::errorReponse {
-                            errorText: "Max players reached".to_string(),
-                        };
-                        send_message(response, &lists.0, &addr_id_pair.0);
-                        return;
-                    }
-                }
-                None => (),
-            };
-
-            let join_room_result = match join_room(
-                connection_info,
-                name.to_owned(),
-                avatarPath.to_owned(),
-                roomId.to_owned(),
-            ) {
-                Ok(res) => res,
-                Err(err) => {
-                    let response = Response::errorReponse {
-                        errorText: err.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            lists.1.lock().unwrap().push(join_room_result.0);
-
-            match edit_list_element(roomId, lists.2.clone(), |room| {
-                room.current_players += 1;
-            }) {
-                Ok(_) => (),
-                Err(error) => warn!("Could not ad user to room: {}", error),
-            };
-
-            let response = Response::joinRoomResponse {
-                token: join_room_result.1,
-                userList: get_room_user_list(&roomId, lists.1.lock().unwrap()),
-            };
-
-            send_message(response, &lists.0, &addr_id_pair.0);
-
-            let broadcast_response = Response::updateUserList {
-                userList: get_room_user_list(&roomId, lists.1.lock().unwrap()),
-            };
-
-            broadcast_message_room_except(
-                broadcast_response,
-                &lists.0,
-                &get_room_user_list(&roomId, lists.1.lock().unwrap()),
-                &addr_id_pair.0,
-            );
-
-            info!("Successful room join for: {}", &addr_id_pair.0);
-        }
-        Command::heartbeat {} => {
-            info!("Heartbeat from: {}", &addr_id_pair.0);
-        }
-        Command::startGame { packPath } => {
-            info!("Start game command from: {}", &addr_id_pair.0);
-
-            let token_info = match connection_info.4 {
-                Ok(res) => res.claims,
-                Err(error) => {
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            match connection_info.1 {
-                Some(_) => (),
-                None => {
-                    let response = Response::errorReponse {
-                        errorText: "User does not exist".to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            }
-
-            match connection_info.3 {
+            // Return error if user exists
+            match get_list_element(&connection_id, lists.1.clone()) {
                 Some(_) => {
                     let response = Response::errorReponse {
-                        errorText: "Game already in progress".to_string(),
+                        errorText: "User already exists".to_string(),
                     };
-                    send_message(response, &lists.0, &addr_id_pair.0);
+                    send_message(response, lists.0.clone(), &connection_id);
                     return;
                 }
                 None => (),
             }
 
-            if !connection_info.1.unwrap().isHost {
-                let response = Response::errorReponse {
-                    errorText: "Only host can start the game".to_string(),
-                };
-                send_message(response, &lists.0, &addr_id_pair.0);
-                return;
-            }
-
-            let broadcast_response = Response::startGame {};
-            broadcast_message_room_all(
-                broadcast_response,
-                &lists.0,
-                &get_room_user_list(&token_info.roomId.clone(), lists.1.lock().unwrap()),
-            );
-
-            // previously: fs::read_to_string("./packs/test.json")
-            let data = match fs::read_to_string(packPath) {
-                Ok(data) => data,
-                Err(error) => {
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-            let pack: Pack = match serde_json::from_str(&data) {
-                Ok(pack) => pack,
-                Err(error) => {
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            tokio::spawn(handle_game(
-                (
-                    lists.0.clone(),
-                    lists.1.clone(),
-                    lists.2.clone(),
-                    lists.3.clone(),
-                ),
-                get_room_user_list(&token_info.roomId.clone(), lists.1.lock().unwrap()),
-                connection_info.2.unwrap().id.clone(),
-                pack,
-            ));
-
-            info!("Loading pack success");
-        }
-        Command::getUserList {} => {
-            info!("Get user list request from: {}", &addr_id_pair.0);
-
-            let token_info = match connection_info.4 {
-                Ok(res) => res.claims,
-                Err(error) => {
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            let user_list = get_room_user_list(&token_info.roomId, lists.1.lock().unwrap());
-
-            let response = Response::updateUserList {
-                userList: user_list,
-            };
-
-            send_message(response, &lists.0, &addr_id_pair.0);
-            info!("Successful get user list from: {}", &addr_id_pair.0);
-        }
-        Command::broadcastMessage { text } => {
-            info!("Broadcast to room from: {}", &addr_id_pair.0);
-
-            let token_info = match connection_info.4 {
-                Ok(res) => res.claims,
-                Err(error) => {
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            let response = Response::newMessage {
-                text: text.to_owned(),
-                author: token_info.id,
-            };
-
-            let user_list = get_room_user_list(&token_info.roomId, lists.1.lock().unwrap());
-
-            broadcast_message_room_all(response, &lists.0, &user_list);
-            info!("Successful broadcast to room from: {}", &addr_id_pair.0);
-        }
-        Command::writeAnswer { answer } => {
-            info!("Answer message from: {}", &addr_id_pair.0);
-
-            let token_info = match connection_info.4 {
-                Ok(res) => res.claims,
-                Err(error) => {
-                    warn!("Error at token validation: {}", error.to_string());
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            match connection_info.1 {
-                Some(_) => (),
+            // Return if room does not exist
+            let room = match get_list_element(&roomId, lists.2.clone()) {
+                Some(room) => room,
                 None => {
-                    warn!("User does not exist");
-                    let response = Response::errorReponse {
-                        errorText: "User does not exist".to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            }
-
-            match connection_info.2 {
-                Some(_) => (),
-                None => {
-                    warn!("Room does not exist");
                     let response = Response::errorReponse {
                         errorText: "Room does not exist".to_string(),
                     };
-                    send_message(response, &lists.0, &addr_id_pair.0);
+                    send_message(response, lists.0.clone(), &connection_id);
+                    return;
+                }
+            };
+
+            // Return if already max players in room
+            if room.current_players >= room.max_players {
+                let response = Response::errorReponse {
+                    errorText: "Room is full".to_string(),
+                };
+                send_message(response, lists.0.clone(), &connection_id);
+                return;
+            }
+
+            // Return if game in progress
+            if lists.3.lock().unwrap().contains_key(&roomId) {
+                let response = Response::errorReponse {
+                    errorText: "Game is in progress".to_string(),
+                };
+                send_message(response, lists.0.clone(), &connection_id);
+                return;
+            }
+
+            // Try create user and token and handle it
+            match join_room(connection_id, name, avatarPath, &roomId) {
+                Ok(join_room) => {
+                    lists.1.lock().unwrap().push(join_room.0);
+
+                    match edit_list_element(&roomId, lists.2.clone(), |room| {
+                        room.current_players += 1;
+                    }) {
+                        Ok(_) => (),
+                        Err(error) => {
+                            let response = Response::errorReponse { errorText: error };
+                            send_message(response, lists.0.clone(), &connection_id);
+                            return;
+                        }
+                    }
+
+                    let user_list = get_room_user_list(&roomId, lists.1.clone());
+
+                    let token_response = Response::joinRoomResponse {
+                        token: join_room.1,
+                        userList: user_list.clone(),
+                    };
+                    send_message(token_response, lists.0.clone(), &connection_id);
+
+                    let user_list_response = Response::updateUserList {
+                        userList: user_list.clone(),
+                    };
+                    broadcast_message_room_all(user_list_response, lists.0.clone(), &user_list);
+                }
+                Err(error) => {
+                    let response = Response::errorReponse { errorText: error };
+                    send_message(response, lists.0.clone(), &connection_id);
                     return;
                 }
             }
-
-            match connection_info.3 {
-                Some(_) => (),
-                None => {
-                    warn!("Game does not exist");
-                    let response = Response::errorReponse {
-                        errorText: "Game does not exist".to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            }
-
-            let answer = GameCommand {
-                user_id: token_info.id.to_string(),
-                answer: *answer,
-            };
-            connection_info
-                .3
-                .unwrap()
-                .1
-                .unbounded_send(Message::Text(serde_json::to_string(&answer).unwrap()))
-                .unwrap();
-
-            info!("Successful answer message from: {}", &addr_id_pair.0);
         }
-        Command::changeUsername { newName } => {
-            let token_info = match connection_info.4 {
-                Ok(res) => res.claims,
-                Err(error) => {
-                    warn!("Error at token validation: {}", error.to_string());
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            edit_list_element(&token_info.id, lists.1.clone(), |user| {
-                user.name = newName.clone();
-            })
-            .unwrap();
-        }
-        Command::changeAvatar { newAvatarPath } => {
-            let token_info = match connection_info.4 {
-                Ok(res) => res.claims,
-                Err(error) => {
-                    warn!("Error at token validation: {}", error.to_string());
-                    let response = Response::errorReponse {
-                        errorText: error.to_string(),
-                    };
-                    send_message(response, &lists.0, &addr_id_pair.0);
-                    return;
-                }
-            };
-
-            edit_list_element(&token_info.id, lists.1.clone(), |user| {
-                user.avatarPath = newAvatarPath.clone();
-            })
-            .unwrap();
+        UnauthorizedCommand::heartbeat {} => {
+            info!("Heartbeat from: {}", &connection_id);
         }
     }
 }
 
+pub fn execute_authorized_command(
+    command_token_pair: CommandTokenPair,
+    lists: Lists,
+    connection_id: &String,
+) {
+    let token_info = match decode_token(&command_token_pair.token) {
+        Ok(info) => info.claims,
+        Err(_) => {
+            // SEND ERROR MESSAGE
+            return;
+        }
+    };
+
+    match command_token_pair.command {
+        AuthorizedCommand::reconnectRoom {} => todo!(),
+        AuthorizedCommand::startGame { packPath } => todo!(),
+        AuthorizedCommand::getUserList {} => todo!(),
+        AuthorizedCommand::broadcastMessage { text } => todo!(),
+        AuthorizedCommand::writeAnswer { answer } => todo!(),
+        AuthorizedCommand::changeUsername { newName } => todo!(),
+        AuthorizedCommand::changeAvatar { newAvatarPath } => todo!(),
+    }
+}
+
 fn create_room(
-    connection_info: &ConnectionInfo,
+    id: &String,
     name: String,
     avatar_path: String,
 ) -> Result<(User, String, Room), String> {
-    match connection_info.1 {
-        Some(_) => return Err("User already exists".to_string()),
-        None => (),
-    }
-
     let new_room = Room {
         id: Uuid::new_v4().to_string(),
         max_players: 6,
-        host_id: connection_info.0 .1.clone(),
+        host_id: id.clone(),
         current_players: 1,
     };
 
     let color: UserColors = rand::random();
     let new_user = User {
-        id: connection_info.0 .1.clone(),
+        id: id.clone(),
         name: name.to_string(),
         avatarPath: avatar_path.to_string(),
         roomId: new_room.id.clone(),
@@ -498,27 +633,17 @@ fn create_room(
 }
 
 fn join_room(
-    connection_info: ConnectionInfo,
+    id: &String,
     name: String,
     avatar_path: String,
-    room_id: String,
+    room_id: &String,
 ) -> Result<(User, String), String> {
-    match connection_info.1 {
-        Some(_) => return Err("User already exists".to_string()),
-        None => (),
-    }
-
-    match connection_info.3 {
-        Some(_) => return Err("Game in progress".to_string()),
-        None => (),
-    }
-
     let color: UserColors = rand::random();
     let new_user = User {
-        id: connection_info.0 .1.clone(),
+        id: id.clone(),
         name: name.to_string(),
         avatarPath: avatar_path.to_string(),
-        roomId: room_id.to_string(),
+        roomId: room_id.clone(),
         isHost: false,
         userColor: color.value(),
     };
@@ -532,23 +657,4 @@ fn join_room(
             return Err(error.to_string());
         }
     }
-}
-
-pub fn edit_list_element<F, T: HasId>(
-    id: &String,
-    list: Arc<Mutex<Vec<T>>>,
-    mut function: F,
-) -> Result<(), String>
-where
-    F: FnMut(&mut T),
-{
-    let mut users = list.lock().unwrap();
-    let target_user = match users.iter_mut().find(|user| &user.get_id() == id) {
-        Some(user) => user,
-        None => return Err("Item does not exist in list".to_string()),
-    };
-
-    function(target_user);
-
-    Ok(())
 }

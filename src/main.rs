@@ -9,14 +9,13 @@ use std::{
     collections::HashMap,
     env,
     io::Error as IoError,
-    net::SocketAddr,
     sync::{Arc, Mutex},
 };
 use tokio::net::TcpListener;
 use tungstenite::protocol::Message;
 
 type Tx = UnboundedSender<Message>;
-type PeerMap = Arc<Mutex<HashMap<(SocketAddr, String), Tx>>>;
+type PeerMap = Arc<Mutex<HashMap<String, Tx>>>;
 type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;

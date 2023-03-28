@@ -23,7 +23,7 @@ pub enum Response {
         author: String,
         text: String,
     },
-    startGame {},
+    startGame,
     errorReponse {
         errorText: String,
     },
@@ -46,8 +46,13 @@ pub enum Response {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
 pub enum Command {
+    UnauthorizedCommand(UnauthorizedCommand),
+    CommandTokenPair(CommandTokenPair),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum UnauthorizedCommand {
     createRoom {
         name: String,
         avatarPath: String,
@@ -57,28 +62,23 @@ pub enum Command {
         avatarPath: String,
         roomId: String,
     },
-    heartbeat {},
-    startGame {
-        packPath: String,
-    },
+    heartbeat,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum AuthorizedCommand {
+    reconnectRoom {},
+    startGame { packPath: String },
     getUserList {},
-    broadcastMessage {
-        text: String,
-    },
-    writeAnswer {
-        answer: i32,
-    },
-    changeUsername {
-        newName: String,
-    },
-    changeAvatar {
-        newAvatarPath: String,
-    },
+    broadcastMessage { text: String },
+    writeAnswer { answer: i32 },
+    changeUsername { newName: String },
+    changeAvatar { newAvatarPath: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CommandTokenPair {
     #[serde(flatten)]
-    pub command: Command,
+    pub command: AuthorizedCommand,
     pub token: String,
 }
