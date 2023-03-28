@@ -472,11 +472,16 @@ pub fn execute_unauthorized_command(
             // Try create user, token and room and handle it
             match create_room(connection_id, name, avatarPath) {
                 Ok(create_room) => {
+                    let room_id = create_room.2.id.clone();
+
                     lists.1.lock().unwrap().push(create_room.0);
                     lists.2.lock().unwrap().push(create_room.2);
 
+                    let user_list = get_room_user_list(&room_id, lists.1.clone());
+
                     let response = Response::createRoomResponse {
                         token: create_room.1,
+                        userList: user_list,
                     };
                     send_message(response, lists.0.clone(), &connection_id);
                 }

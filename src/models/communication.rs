@@ -11,6 +11,7 @@ use super::{game::Answer, lobby::User};
 pub enum Response {
     createRoomResponse {
         token: String,
+        userList: Vec<User>,
     },
     joinRoomResponse {
         token: String,
