@@ -73,7 +73,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
             },
             Err(error) => {
                 warn!("Error parsing command!: {}", error);
-                let response = Response::errorReponse {
+                let response = Response::errorResponse {
                     errorText: error.to_string(),
                     errorCode: 1,
                 };

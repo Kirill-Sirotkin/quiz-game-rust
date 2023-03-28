@@ -24,7 +24,7 @@ pub enum Response {
         text: String,
     },
     startGame {},
-    errorReponse {
+    errorResponse {
         errorText: String,
         errorCode: i32,
     },

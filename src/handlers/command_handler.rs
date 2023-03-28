@@ -459,7 +459,7 @@ pub fn execute_unauthorized_command(
             // Return error if user exists
             match get_list_element(&connection_id, lists.1.clone()) {
                 Some(_) => {
-                    let response = Response::errorReponse {
+                    let response = Response::errorResponse {
                         errorText: "User already exists".to_string(),
                         errorCode: 1,
                     };
@@ -481,7 +481,7 @@ pub fn execute_unauthorized_command(
                     send_message(response, lists.0.clone(), &connection_id);
                 }
                 Err(error) => {
-                    let response = Response::errorReponse {
+                    let response = Response::errorResponse {
                         errorText: error,
                         errorCode: 1,
                     };
@@ -498,7 +498,7 @@ pub fn execute_unauthorized_command(
             // Return error if user exists
             match get_list_element(&connection_id, lists.1.clone()) {
                 Some(_) => {
-                    let response = Response::errorReponse {
+                    let response = Response::errorResponse {
                         errorText: "User already exists".to_string(),
                         errorCode: 1,
                     };
@@ -512,7 +512,7 @@ pub fn execute_unauthorized_command(
             let room = match get_list_element(&roomId, lists.2.clone()) {
                 Some(room) => room,
                 None => {
-                    let response = Response::errorReponse {
+                    let response = Response::errorResponse {
                         errorText: "Room does not exist".to_string(),
                         errorCode: 1,
                     };
@@ -523,7 +523,7 @@ pub fn execute_unauthorized_command(
 
             // Return if already max players in room
             if room.current_players >= room.max_players {
-                let response = Response::errorReponse {
+                let response = Response::errorResponse {
                     errorText: "Room is full".to_string(),
                     errorCode: 1,
                 };
@@ -533,7 +533,7 @@ pub fn execute_unauthorized_command(
 
             // Return if game in progress
             if lists.3.lock().unwrap().contains_key(&roomId) {
-                let response = Response::errorReponse {
+                let response = Response::errorResponse {
                     errorText: "Game is in progress".to_string(),
                     errorCode: 1,
                 };
@@ -553,7 +553,7 @@ pub fn execute_unauthorized_command(
                     ) {
                         Ok(list) => list,
                         Err(error) => {
-                            let response = Response::errorReponse {
+                            let response = Response::errorResponse {
                                 errorText: error,
                                 errorCode: 1,
                             };
@@ -569,7 +569,7 @@ pub fn execute_unauthorized_command(
                     send_message(token_response, lists.0.clone(), &connection_id);
                 }
                 Err(error) => {
-                    let response = Response::errorReponse {
+                    let response = Response::errorResponse {
                         errorText: error,
                         errorCode: 1,
                     };
@@ -593,7 +593,7 @@ pub fn execute_authorized_command(
     let token_info = match decode_token(&command_token_pair.token) {
         Ok(info) => info.claims,
         Err(error) => {
-            let response = Response::errorReponse {
+            let response = Response::errorResponse {
                 errorText: error,
                 errorCode: 0,
             };
@@ -606,7 +606,7 @@ pub fn execute_authorized_command(
         AuthorizedCommand::reconnectRoom {} => {
             // Return if connection is active
             if lists.0.lock().unwrap().contains_key(&token_info.id) {
-                let response = Response::errorReponse {
+                let response = Response::errorResponse {
                     errorText: "User already active".to_string(),
                     errorCode: 1,
                 };
@@ -618,7 +618,7 @@ pub fn execute_authorized_command(
             let connection_channel = match lists.0.lock().unwrap().get(connection_id) {
                 Some(tx) => tx.clone(),
                 None => {
-                    let response = Response::errorReponse {
+                    let response = Response::errorResponse {
                         errorText: "Cannot find connection channel".to_string(),
                         errorCode: 1,
                     };
@@ -643,7 +643,7 @@ pub fn execute_authorized_command(
             ) {
                 Ok(list) => list,
                 Err(error) => {
-                    let response = Response::errorReponse {
+                    let response = Response::errorResponse {
                         errorText: error,
                         errorCode: 1,
                     };

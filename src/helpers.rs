@@ -57,7 +57,7 @@ pub fn connect_user_to_room(
     }) {
         Ok(_) => (),
         Err(error) => {
-            let response = Response::errorReponse {
+            let response = Response::errorResponse {
                 errorText: error.clone(),
                 errorCode: 1,
             };
