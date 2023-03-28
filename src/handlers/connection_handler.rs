@@ -132,7 +132,11 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
     match user_id {
         Some(user_id) => {
             println!("Starting user removal");
-            handle_user_timeout(user_id, lists.1.clone(), lists.0.clone()).await;
+            tokio::spawn(handle_user_timeout(
+                user_id,
+                lists.1.clone(),
+                lists.0.clone(),
+            ));
         }
         None => (),
     }
