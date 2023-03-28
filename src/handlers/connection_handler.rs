@@ -112,6 +112,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         Some(user) => Some(user.id.clone()),
         None => None,
     };
+
     lists.0.lock().unwrap().remove(&connection_id);
 
     match user_id {

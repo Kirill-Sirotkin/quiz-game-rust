@@ -38,7 +38,7 @@ pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
 }
 
 pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map: PeerMap) {
-    Delay::new(Duration::from_secs(10)).await;
+    Delay::new(Duration::from_secs(1)).await;
 
     if !peer_map.lock().unwrap().contains_key(&user_id) {
         println!("Removing user: {}", &user_id);
