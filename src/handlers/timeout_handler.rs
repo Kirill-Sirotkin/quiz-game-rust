@@ -25,13 +25,17 @@ pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
         println!("Removing room: {}", &room_id);
         info!("Removing room: {}", &room_id);
 
-        let index = room_list
+        match room_list
             .lock()
             .unwrap()
             .iter()
             .position(|room| room.id == room_id)
-            .unwrap();
-        room_list.lock().unwrap().remove(index);
+        {
+            Some(index) => {
+                room_list.lock().unwrap().remove(index);
+            }
+            None => println!("No index found for room!"),
+        }
     } else {
         println!("NOT removing room: {}", &room_id);
     }
@@ -44,13 +48,17 @@ pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map:
         println!("Removing user: {}", &user_id);
         info!("Removing user: {}", &user_id);
 
-        let index = user_list
+        match user_list
             .lock()
             .unwrap()
             .iter()
             .position(|user| user.id == user_id)
-            .unwrap();
-        user_list.lock().unwrap().remove(index);
+        {
+            Some(index) => {
+                user_list.lock().unwrap().remove(index);
+            }
+            None => println!("No index found for user!"),
+        };
     } else {
         println!("NOT removing user: {}", &user_id);
     }
