@@ -658,12 +658,12 @@ pub fn execute_authorized_command(
             };
             send_message(user_list_response, lists.0.clone(), &token_info.id);
         }
-        AuthorizedCommand::startGame { packPath } => todo!(),
-        AuthorizedCommand::getUserList {} => todo!(),
-        AuthorizedCommand::broadcastMessage { text } => todo!(),
-        AuthorizedCommand::writeAnswer { answer } => todo!(),
-        AuthorizedCommand::changeUsername { newName } => todo!(),
-        AuthorizedCommand::changeAvatar { newAvatarPath } => todo!(),
+        AuthorizedCommand::startGame { packPath } => (),
+        AuthorizedCommand::getUserList {} => (),
+        AuthorizedCommand::broadcastMessage { text } => (),
+        AuthorizedCommand::writeAnswer { answer } => (),
+        AuthorizedCommand::changeUsername { newName } => (),
+        AuthorizedCommand::changeAvatar { newAvatarPath } => (),
     }
 }
 
