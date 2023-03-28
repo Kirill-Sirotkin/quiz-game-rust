@@ -1,13 +1,24 @@
-use std::sync::{Arc, Mutex};
-
-use crate::models::{
-    communication::Command,
-    game::GameCommand,
-    lobby::{HasId, User},
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
+
+use crate::{
+    models::{
+        communication::{Command, Response},
+        game::GameCommand,
+        lobby::{HasId, Room, User},
+    },
+    server_messages::{broadcast_message_room_except, send_message},
+};
+use futures_channel::mpsc::UnboundedSender;
 use tungstenite::Message;
 
+type Tx = UnboundedSender<Message>;
+type PeerMap = Arc<Mutex<HashMap<String, Tx>>>;
 type UserList = Arc<Mutex<Vec<User>>>;
+type RoomList = Arc<Mutex<Vec<Room>>>;
+type Lists = (PeerMap, UserList, RoomList);
 
 pub fn parse_command(msg: &Message) -> Result<Command, String> {
     let unauthorized_command = match serde_json::from_str(&msg.to_string()) {
@@ -34,6 +45,34 @@ pub fn parse_game_command(msg: &Message) -> Result<(String, i32), String> {
         }
         Err(error) => return Err(error.to_string()),
     }
+}
+
+pub fn connect_user_to_room(
+    room_id: &String,
+    user_id: &String,
+    lists: Lists,
+) -> Result<Vec<User>, String> {
+    match edit_list_element(room_id, lists.2.clone(), |room| {
+        room.current_players += 1;
+    }) {
+        Ok(_) => (),
+        Err(error) => {
+            let response = Response::errorReponse {
+                errorText: error.clone(),
+            };
+            send_message(response, lists.0.clone(), user_id);
+            return Err(error);
+        }
+    }
+
+    let user_list = get_room_user_list(room_id, lists.1.clone());
+
+    let user_list_response = Response::updateUserList {
+        userList: user_list.clone(),
+    };
+    broadcast_message_room_except(user_list_response, lists.0.clone(), &user_list, user_id);
+
+    Ok(user_list)
 }
 
 pub fn get_room_user_list(room_id: &String, user_list: UserList) -> Vec<User> {

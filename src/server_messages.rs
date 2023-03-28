@@ -29,6 +29,7 @@ pub fn send_message(response: Response, peer_map: PeerMap, id: &String) {
 
     info!("Message sent successfully to: {}", &id);
 }
+
 pub fn broadcast_message_all(response: Response, peer_map: &PeerMap) {
     info!("Sending broadcast to all connections");
     let peers = peer_map.lock().unwrap();
@@ -40,7 +41,8 @@ pub fn broadcast_message_all(response: Response, peer_map: &PeerMap) {
     }
     info!("Broadcast sent successfully to all connections");
 }
-pub fn broadcast_message_except(response: Response, peer_map: &PeerMap, addr: &SocketAddr) {
+
+pub fn broadcast_message_except(response: Response, peer_map: PeerMap, addr: &SocketAddr) {
     info!("Sending broadcast to all connections except: {}", &addr);
     // let peers = peer_map.lock().unwrap();
     // let broadcast_recipients = peers
@@ -57,6 +59,7 @@ pub fn broadcast_message_except(response: Response, peer_map: &PeerMap, addr: &S
         &addr
     );
 }
+
 pub fn broadcast_message_room_all(response: Response, peer_map: PeerMap, user_list: &Vec<User>) {
     info!("Sending broadcast to all room players");
 
@@ -78,30 +81,33 @@ pub fn broadcast_message_room_all(response: Response, peer_map: PeerMap, user_li
 
     info!("Broadcast sent successfully to all room players");
 }
+
 pub fn broadcast_message_room_except(
     response: Response,
-    peer_map: &PeerMap,
+    peer_map: PeerMap,
     user_list: &Vec<User>,
-    addr: &SocketAddr,
+    id: &String,
 ) {
-    info!("Sending broadcast to all room players except: {}", &addr);
-    let peers = peer_map.lock().unwrap();
-    // let broadcast_recipients = peers
-    //     .iter()
-    //     .filter(|(peer_addr, _)| {
-    //         user_list
-    //             .iter()
-    //             .map(|user| &user.id)
-    //             .any(|id| id == &peer_addr.1)
-    //     } && &peer_addr.0 != addr)
-    //     .map(|(_, ws_sink)| ws_sink);
+    info!("Sending broadcast to all room players except: {}", &id);
 
-    // for recp in broadcast_recipients {
-    //     recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
-    //         .unwrap();
-    // }
+    let peers = peer_map.lock().unwrap();
+    let broadcast_recipients = peers
+        .iter()
+        .filter(|(peer_addr, _)| {
+            user_list
+                .iter()
+                .map(|user| &user.id)
+                .any(|user_id| &user_id == peer_addr)
+        } && peer_addr != &id)
+        .map(|(_, ws_sink)| ws_sink);
+
+    for recp in broadcast_recipients {
+        recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
+            .unwrap();
+    }
+
     info!(
         "Broadcast sent successfully to all room players except: {}",
-        &addr
+        &id
     );
 }

@@ -1,6 +1,6 @@
 use crate::{
     handlers::game_handler::handle_game,
-    helpers::{edit_list_element, get_list_element, get_room_user_list},
+    helpers::{connect_user_to_room, edit_list_element, get_list_element, get_room_user_list},
     jwtoken::{decode_token, generate_token, Claims},
     models::{
         communication::{AuthorizedCommand, CommandTokenPair, Response, UnauthorizedCommand},
@@ -538,29 +538,24 @@ pub fn execute_unauthorized_command(
                 Ok(join_room) => {
                     lists.1.lock().unwrap().push(join_room.0);
 
-                    match edit_list_element(&roomId, lists.2.clone(), |room| {
-                        room.current_players += 1;
-                    }) {
-                        Ok(_) => (),
+                    let user_list = match connect_user_to_room(
+                        &roomId,
+                        &connection_id,
+                        (lists.0.clone(), lists.1.clone(), lists.2.clone()),
+                    ) {
+                        Ok(list) => list,
                         Err(error) => {
                             let response = Response::errorReponse { errorText: error };
                             send_message(response, lists.0.clone(), &connection_id);
                             return;
                         }
-                    }
-
-                    let user_list = get_room_user_list(&roomId, lists.1.clone());
+                    };
 
                     let token_response = Response::joinRoomResponse {
                         token: join_room.1,
-                        userList: user_list.clone(),
+                        userList: user_list,
                     };
                     send_message(token_response, lists.0.clone(), &connection_id);
-
-                    let user_list_response = Response::updateUserList {
-                        userList: user_list.clone(),
-                    };
-                    broadcast_message_room_all(user_list_response, lists.0.clone(), &user_list);
                 }
                 Err(error) => {
                     let response = Response::errorReponse { errorText: error };
@@ -580,16 +575,67 @@ pub fn execute_authorized_command(
     lists: Lists,
     connection_id: &String,
 ) {
+    // Validate token
     let token_info = match decode_token(&command_token_pair.token) {
         Ok(info) => info.claims,
-        Err(_) => {
-            // SEND ERROR MESSAGE
+        Err(error) => {
+            let response = Response::errorReponse { errorText: error };
+            send_message(response, lists.0.clone(), &connection_id);
             return;
         }
     };
 
     match command_token_pair.command {
-        AuthorizedCommand::reconnectRoom {} => todo!(),
+        AuthorizedCommand::reconnectRoom {} => {
+            // Return if connection is active
+            if lists.0.lock().unwrap().contains_key(&token_info.id) {
+                let response = Response::errorReponse {
+                    errorText: "User already active".to_string(),
+                };
+                send_message(response, lists.0.clone(), &connection_id);
+                return;
+            }
+
+            // Return if this connection has no tx channel
+            let connection_channel = match lists.0.lock().unwrap().get(connection_id) {
+                Some(tx) => tx.clone(),
+                None => {
+                    let response = Response::errorReponse {
+                        errorText: "Cannot find connection channel".to_string(),
+                    };
+                    send_message(response, lists.0.clone(), &connection_id);
+                    return;
+                }
+            };
+
+            // Remove and re-insert tx channel with id from token
+            lists.0.lock().unwrap().remove(connection_id);
+            lists
+                .0
+                .lock()
+                .unwrap()
+                .insert(token_info.id.clone(), connection_channel);
+
+            // Add user to room
+            let user_list = match connect_user_to_room(
+                &token_info.roomId,
+                &token_info.id,
+                (lists.0.clone(), lists.1.clone(), lists.2.clone()),
+            ) {
+                Ok(list) => list,
+                Err(error) => {
+                    let response = Response::errorReponse { errorText: error };
+                    send_message(response, lists.0.clone(), &connection_id);
+                    return;
+                }
+            };
+
+            // Respond with room user list
+            let user_list_response = Response::updateUserList {
+                userList: user_list.clone(),
+            };
+            send_message(user_list_response, lists.0.clone(), &token_info.id);
+        }
         AuthorizedCommand::startGame { packPath } => todo!(),
         AuthorizedCommand::getUserList {} => todo!(),
         AuthorizedCommand::broadcastMessage { text } => todo!(),

@@ -1,7 +1,7 @@
 use crate::{
     handlers::{
         command_handler::{execute_authorized_command, execute_unauthorized_command},
-        room_handler::handle_room_timeout,
+        timeout_handler::{handle_room_timeout, handle_user_timeout},
     },
     helpers::{edit_list_element, get_list_element, get_room_user_list, parse_command},
     models::{
@@ -90,20 +90,36 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
 
     info!("{} disconnected", &addr);
 
-    let mut users = lists.1.lock().unwrap();
-    let room_id = match users.iter().find(|user| user.id == connection_id) {
+    let room_id = match lists
+        .1
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|user| user.id == connection_id)
+    {
         Some(user) => Some(user.roomId.clone()),
         None => None,
     };
-    match users.iter().position(|user| user.id == connection_id) {
-        Some(index) => {
-            users.remove(index);
-        }
-        None => (),
+
+    let user_id = match lists
+        .1
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|user| user.id == connection_id)
+    {
+        Some(user) => Some(user.id.clone()),
+        None => None,
     };
     lists.0.lock().unwrap().remove(&connection_id);
 
-    drop(users);
+    match user_id {
+        Some(user_id) => {
+            println!("Starting user removal");
+            handle_user_timeout(user_id, lists.1.clone(), lists.0.clone()).await;
+        }
+        None => (),
+    }
 
     match room_id {
         Some(room_id) => {
@@ -120,50 +136,10 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
 
             let room_info = get_list_element(&room_id, lists.2.clone()).unwrap();
             if room_info.current_players <= 0 {
+                println!("Starting room removal");
                 tokio::spawn(handle_room_timeout(room_id.clone(), lists.2.clone()));
             }
         }
         None => (),
     }
-
-    // match room_id {
-    //     Some(id) => {
-    //         let user_list = get_room_user_list(&id, lists.1.lock().unwrap());
-    //         let user_disconnect_response = Response::updateUserList {
-    //             userList: user_list.clone(),
-    //         };
-    //         match edit_list_element(&id, lists.2.clone(), |room| {
-    //             room.current_players -= 1;
-    //         }) {
-    //             Ok(_) => (),
-    //             Err(error) => warn!("Could not remove user from room: {}", error),
-    //         };
-    //         broadcast_message_room_all(user_disconnect_response, &lists.0, &user_list);
-
-    //         let room_players = match lists.2.lock().unwrap().iter().find(|room| room.id == id) {
-    //             Some(room) => Some(room.current_players),
-    //             None => None,
-    //         };
-
-    //         let room_index = match lists
-    //             .2
-    //             .lock()
-    //             .unwrap()
-    //             .iter()
-    //             .position(|room| room.id == id)
-    //         {
-    //             Some(index) => Some(index),
-    //             None => None,
-    //         };
-    //         match room_players {
-    //             Some(players) => {
-    //                 if players <= 0 {
-    //                     lists.2.lock().unwrap().remove(room_index.unwrap());
-    //                 }
-    //             }
-    //             None => (),
-    //         };
-    //     }
-    //     None => (),
-    // }
 }
