@@ -23,7 +23,7 @@ pub enum Response {
         author: String,
         text: String,
     },
-    startGame,
+    startGame {},
     errorReponse {
         errorText: String,
     },
@@ -62,7 +62,7 @@ pub enum UnauthorizedCommand {
         avatarPath: String,
         roomId: String,
     },
-    heartbeat,
+    heartbeat {},
 }
 
 #[derive(Serialize, Deserialize, Debug)]
