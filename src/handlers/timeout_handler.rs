@@ -18,9 +18,15 @@ type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 
 pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
-    Delay::new(Duration::from_secs(2)).await;
+    Delay::new(Duration::from_secs(5)).await;
 
-    let room_info = get_list_element(&room_id, room_list.clone()).unwrap();
+    let room_info = match get_list_element(&room_id, room_list.clone()) {
+        Some(info) => info,
+        None => {
+            println!("No room info found!");
+            return;
+        }
+    };
     if room_info.current_players <= 0 {
         println!("Removing room: {}", &room_id);
         info!("Removing room: {}", &room_id);
@@ -42,7 +48,7 @@ pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
 }
 
 pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map: PeerMap) {
-    Delay::new(Duration::from_secs(2)).await;
+    Delay::new(Duration::from_secs(10)).await;
 
     if !peer_map.lock().unwrap().contains_key(&user_id) {
         println!("Removing user: {}", &user_id);
