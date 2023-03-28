@@ -34,6 +34,7 @@ type ConnectionInfo<'a> = (
     Option<(String, UnboundedSender<Message>)>,
     Result<TokenData<Claims>, String>,
 );
+type MutexId = Arc<Mutex<String>>;
 
 // pub fn execute_command(command: &CommandTokenPair, lists: Lists, addr: &SocketAddr) {
 //     let token_info = decode_token(&command.token);
@@ -452,25 +453,29 @@ type ConnectionInfo<'a> = (
 pub fn execute_unauthorized_command(
     command: UnauthorizedCommand,
     lists: Lists,
-    connection_id: &String,
+    connection_id: MutexId,
 ) {
     match command {
         UnauthorizedCommand::createRoom { name, avatarPath } => {
             // Return error if user exists
-            match get_list_element(&connection_id, lists.1.clone()) {
+            match get_list_element(&connection_id.lock().unwrap().clone(), lists.1.clone()) {
                 Some(_) => {
                     let response = Response::errorResponse {
                         errorText: "User already exists".to_string(),
                         errorCode: 0,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     return;
                 }
                 None => (),
             }
 
             // Try create user, token and room and handle it
-            match create_room(connection_id, name, avatarPath) {
+            match create_room(connection_id.clone(), name, avatarPath) {
                 Ok(create_room) => {
                     let room_id = create_room.2.id.clone();
 
@@ -483,14 +488,22 @@ pub fn execute_unauthorized_command(
                         token: create_room.1,
                         userList: user_list,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                 }
                 Err(error) => {
                     let response = Response::errorResponse {
                         errorText: error,
                         errorCode: 0,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     return;
                 }
             }
@@ -501,13 +514,17 @@ pub fn execute_unauthorized_command(
             roomId,
         } => {
             // Return error if user exists
-            match get_list_element(&connection_id, lists.1.clone()) {
+            match get_list_element(&connection_id.lock().unwrap().clone(), lists.1.clone()) {
                 Some(_) => {
                     let response = Response::errorResponse {
                         errorText: "User already exists".to_string(),
                         errorCode: 0,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     return;
                 }
                 None => (),
@@ -521,7 +538,11 @@ pub fn execute_unauthorized_command(
                         errorText: "Room does not exist".to_string(),
                         errorCode: 0,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     return;
                 }
             };
@@ -532,7 +553,11 @@ pub fn execute_unauthorized_command(
                     errorText: "Room is full".to_string(),
                     errorCode: 0,
                 };
-                send_message(response, lists.0.clone(), &connection_id);
+                send_message(
+                    response,
+                    lists.0.clone(),
+                    &connection_id.lock().unwrap().clone(),
+                );
                 return;
             }
 
@@ -542,18 +567,22 @@ pub fn execute_unauthorized_command(
                     errorText: "Game is in progress".to_string(),
                     errorCode: 0,
                 };
-                send_message(response, lists.0.clone(), &connection_id);
+                send_message(
+                    response,
+                    lists.0.clone(),
+                    &connection_id.lock().unwrap().clone(),
+                );
                 return;
             }
 
             // Try create user and token and handle it
-            match join_room(connection_id, name, avatarPath, &roomId) {
+            match join_room(connection_id.clone(), name, avatarPath, &roomId) {
                 Ok(join_room) => {
                     lists.1.lock().unwrap().push(join_room.0);
 
                     let user_list = match connect_user_to_room(
                         &roomId,
-                        &connection_id,
+                        &connection_id.lock().unwrap().clone(),
                         (lists.0.clone(), lists.1.clone(), lists.2.clone()),
                     ) {
                         Ok(list) => list,
@@ -562,7 +591,11 @@ pub fn execute_unauthorized_command(
                                 errorText: error,
                                 errorCode: 0,
                             };
-                            send_message(response, lists.0.clone(), &connection_id);
+                            send_message(
+                                response,
+                                lists.0.clone(),
+                                &connection_id.lock().unwrap().clone(),
+                            );
                             return;
                         }
                     };
@@ -571,20 +604,28 @@ pub fn execute_unauthorized_command(
                         token: join_room.1,
                         userList: user_list,
                     };
-                    send_message(token_response, lists.0.clone(), &connection_id);
+                    send_message(
+                        token_response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                 }
                 Err(error) => {
                     let response = Response::errorResponse {
                         errorText: error,
                         errorCode: 0,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     return;
                 }
             }
         }
         UnauthorizedCommand::heartbeat {} => {
-            info!("Heartbeat from: {}", &connection_id);
+            info!("Heartbeat from: {}", &connection_id.lock().unwrap().clone());
         }
     }
 }
@@ -592,7 +633,7 @@ pub fn execute_unauthorized_command(
 pub fn execute_authorized_command(
     command_token_pair: CommandTokenPair,
     lists: Lists,
-    connection_id: &String,
+    connection_id: MutexId,
 ) {
     // Validate token
     let token_info = match decode_token(&command_token_pair.token) {
@@ -602,7 +643,11 @@ pub fn execute_authorized_command(
                 errorText: error,
                 errorCode: 2,
             };
-            send_message(response, lists.0.clone(), &connection_id);
+            send_message(
+                response,
+                lists.0.clone(),
+                &connection_id.lock().unwrap().clone(),
+            );
             return;
         }
     };
@@ -615,30 +660,50 @@ pub fn execute_authorized_command(
                     errorText: "User already active".to_string(),
                     errorCode: 0,
                 };
-                send_message(response, lists.0.clone(), &connection_id);
+                send_message(
+                    response,
+                    lists.0.clone(),
+                    &connection_id.lock().unwrap().clone(),
+                );
                 return;
             }
 
             // Return if this connection has no tx channel
-            let connection_channel = match lists.0.lock().unwrap().get(connection_id) {
+            let connection_channel = match lists
+                .0
+                .lock()
+                .unwrap()
+                .get(&connection_id.lock().unwrap().clone())
+            {
                 Some(tx) => tx.clone(),
                 None => {
                     let response = Response::errorResponse {
                         errorText: "Cannot find connection channel".to_string(),
                         errorCode: 0,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     return;
                 }
             };
 
             // Remove and re-insert tx channel with id from token
-            lists.0.lock().unwrap().remove(connection_id);
+            lists
+                .0
+                .lock()
+                .unwrap()
+                .remove(&connection_id.lock().unwrap().clone());
             lists
                 .0
                 .lock()
                 .unwrap()
                 .insert(token_info.id.clone(), connection_channel);
+
+            // Change connection ID for connection handler
+            *connection_id.lock().unwrap() = token_info.id.clone();
 
             // Add user to room
             let user_list = match connect_user_to_room(
@@ -652,7 +717,11 @@ pub fn execute_authorized_command(
                         errorText: error,
                         errorCode: 0,
                     };
-                    send_message(response, lists.0.clone(), &connection_id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     return;
                 }
             };
@@ -673,20 +742,20 @@ pub fn execute_authorized_command(
 }
 
 fn create_room(
-    id: &String,
+    id: MutexId,
     name: String,
     avatar_path: String,
 ) -> Result<(User, String, Room), String> {
     let new_room = Room {
         id: Uuid::new_v4().to_string(),
         max_players: 6,
-        host_id: id.clone(),
+        host_id: id.lock().unwrap().clone(),
         current_players: 1,
     };
 
     let color: UserColors = rand::random();
     let new_user = User {
-        id: id.clone(),
+        id: id.lock().unwrap().clone(),
         name: name.to_string(),
         avatarPath: avatar_path.to_string(),
         roomId: new_room.id.clone(),
@@ -706,14 +775,14 @@ fn create_room(
 }
 
 fn join_room(
-    id: &String,
+    id: MutexId,
     name: String,
     avatar_path: String,
     room_id: &String,
 ) -> Result<(User, String), String> {
     let color: UserColors = rand::random();
     let new_user = User {
-        id: id.clone(),
+        id: id.lock().unwrap().clone(),
         name: name.to_string(),
         avatarPath: avatar_path.to_string(),
         roomId: room_id.clone(),

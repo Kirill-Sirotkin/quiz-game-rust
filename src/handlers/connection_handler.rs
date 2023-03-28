@@ -28,6 +28,7 @@ type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;
 type Lists = (PeerMap, UserList, RoomList, GameList);
+type MutexId = Arc<Mutex<String>>;
 
 pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: SocketAddr) {
     info!("Incoming TCP connection from: {}", &addr);
@@ -41,9 +42,14 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
     };
     info!("WebSocket connection established: {}", &addr);
 
-    let connection_id = Uuid::new_v4().to_string();
+    let connection_id = MutexId::new(Mutex::new(Uuid::new_v4().to_string()));
+
     let (tx, rx) = unbounded();
-    lists.0.lock().unwrap().insert(connection_id.clone(), tx);
+    lists
+        .0
+        .lock()
+        .unwrap()
+        .insert(connection_id.lock().unwrap().clone(), tx);
 
     let (outgoing, incoming) = ws_stream.split();
 
@@ -58,7 +64,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                         lists.2.clone(),
                         lists.3.clone(),
                     ),
-                    &connection_id,
+                    connection_id.clone(),
                 ),
                 Command::CommandTokenPair(command) => execute_authorized_command(
                     command,
@@ -68,7 +74,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                         lists.2.clone(),
                         lists.3.clone(),
                     ),
-                    &connection_id,
+                    connection_id.clone(),
                 ),
             },
             Err(error) => {
@@ -77,7 +83,11 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                     errorText: error.to_string(),
                     errorCode: 0,
                 };
-                send_message(response, lists.0.clone(), &connection_id);
+                send_message(
+                    response,
+                    lists.0.clone(),
+                    &connection_id.lock().unwrap().clone(),
+                );
             }
         }
 
@@ -96,7 +106,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         .lock()
         .unwrap()
         .iter()
-        .find(|user| user.id == connection_id)
+        .find(|user| user.id == connection_id.lock().unwrap().clone())
     {
         Some(user) => Some(user.roomId.clone()),
         None => None,
@@ -107,13 +117,17 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         .lock()
         .unwrap()
         .iter()
-        .find(|user| user.id == connection_id)
+        .find(|user| user.id == connection_id.lock().unwrap().clone())
     {
         Some(user) => Some(user.id.clone()),
         None => None,
     };
 
-    lists.0.lock().unwrap().remove(&connection_id);
+    lists
+        .0
+        .lock()
+        .unwrap()
+        .remove(&connection_id.lock().unwrap().clone());
 
     match user_id {
         Some(user_id) => {
