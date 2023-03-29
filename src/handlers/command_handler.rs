@@ -18,7 +18,7 @@ use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
-use tungstenite::protocol::Message;
+use tungstenite::{http::response, protocol::Message};
 use uuid::Uuid;
 
 type Tx = UnboundedSender<Message>;
@@ -695,7 +695,21 @@ pub fn execute_authorized_command(
             // Change connection ID for connection handler
             *connection_id.lock().unwrap() = token_info.id.clone();
 
-            // drop(peer_map_lock);
+            drop(peer_map_lock);
+
+            // Check if user has been removed in the meantime
+            match get_list_element(&token_info.id, lists.1.clone()) {
+                Some(_) => (),
+                None => {
+                    println!("XXXXXX USER NO LONGER EXISTS NOOOOO! XXXXXX");
+                    let response = Response::errorResponse {
+                        errorText: "User has been removed".to_string(),
+                        errorCode: 2,
+                    };
+                    send_message(response, lists.0.clone(), &token_info.id);
+                    return;
+                }
+            }
 
             // Add user to room
             let user_list = match connect_user_to_room(
