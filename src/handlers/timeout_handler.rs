@@ -50,6 +50,13 @@ pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
 pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map: PeerMap) {
     Delay::new(Duration::from_secs(10)).await;
 
+    // IF USER DISCONNECTS AS TIMEOUTS ARE CHECKING PEERMAP TO CONTAIN KEY,
+    // THEN THE KEY WILL NOT EXIST, EVEN THOUGH TECHNICALLY USER DOES EXISTS.
+    // THIS LEADS TO PREMATURE REMOVAL AT THE TIME, WHEN USER IS RECONNECTING.
+    // THUS THE USER GETS BUGGED
+
+    // TRY FIX BY EXTENDING THIS THREAD'S TIMER
+
     if !peer_map.lock().unwrap().contains_key(&user_id) {
         println!("Removing user: {}", &user_id);
         info!("Removing user: {}", &user_id);
@@ -66,6 +73,8 @@ pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map:
             }
             None => println!("No index found for user!"),
         };
+
+        peer_map.lock().unwrap().remove(&user_id);
     } else {
         println!("NOT removing user: {}", &user_id);
     }
