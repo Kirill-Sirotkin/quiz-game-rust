@@ -695,7 +695,7 @@ pub fn execute_authorized_command(
             // Change connection ID for connection handler
             *connection_id.lock().unwrap() = token_info.id.clone();
 
-            drop(peer_map_lock);
+            // drop(peer_map_lock);
 
             // Add user to room
             let user_list = match connect_user_to_room(
