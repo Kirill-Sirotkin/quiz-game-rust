@@ -85,7 +85,7 @@ pub fn connect_user_to_room(
                 }
             }
         }
-        None => todo!(),
+        None => (),
     }
 
     let user_list = get_room_user_list(room_id, lists.1.clone());
