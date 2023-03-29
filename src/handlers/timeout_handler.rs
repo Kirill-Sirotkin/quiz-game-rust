@@ -3,11 +3,16 @@ use crate::{
     models::lobby::{Room, User},
 };
 use core::time;
-use futures_channel::mpsc::UnboundedSender;
+use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_timer::Delay;
+use futures_util::{
+    future::{self, ok, Pending},
+    pin_mut, StreamExt,
+};
 use log::info;
 use std::{
     collections::HashMap,
+    ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -48,8 +53,38 @@ pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
     }
 }
 
-pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map: PeerMap) {
-    Delay::new(Duration::from_secs(10)).await;
+pub async fn handle_user_timeout(
+    user_id: String,
+    user_list: UserList,
+    peer_map: PeerMap,
+    mut rx: UnboundedReceiver<bool>,
+) {
+    let timer = Delay::new(Duration::from_secs(10));
+
+    // let receive_future = rx.for_each(|msg| {
+    //     match msg {
+    //         true => {
+    //             println!("Received future reset!");
+    //             timer.reset(Duration::from_secs(10));
+    //             tokio::spawn(future)
+    //         }
+    //         false => (),
+    //     }
+    //     future::ready(())
+    // });
+
+    // while true {
+    //     let msg = rx.next().await;
+
+    //     match msg {
+    //         Some(msg) => {
+    //             println!("Received timeout message: {}", msg)
+    //         }
+    //         None => {
+    //             println!("Connection stopped")
+    //         }
+    //     }
+    // }
 
     // IF USER DISCONNECTS AS TIMEOUTS ARE CHECKING PEERMAP TO CONTAIN KEY,
     // THEN THE KEY WILL NOT EXIST, EVEN THOUGH TECHNICALLY USER DOES EXISTS.
@@ -57,6 +92,9 @@ pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map:
     // THUS THE USER GETS BUGGED
 
     // TRY FIX BY EXTENDING THIS THREAD'S TIMER?
+
+    // pin_mut!(timer, receive_future);
+    // future::select(timer, receive_future).await;
 
     if !peer_map.lock().unwrap().contains_key(&user_id) {
         println!("Removing user: {}", &user_id);
@@ -70,12 +108,7 @@ pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map:
 
         match index {
             Some(index) => {
-                if !peer_map.lock().unwrap().contains_key(&user_id) {
-                    println!("Definitely removing user: {}", &user_id);
-                    user_list.lock().unwrap().remove(index);
-                } else {
-                    println!("Changed my mind: {}", &user_id);
-                }
+                user_list.lock().unwrap().remove(index);
             }
             None => println!("No index found for user!"),
         };

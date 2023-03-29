@@ -15,10 +15,12 @@ use tokio::net::TcpListener;
 use tungstenite::protocol::Message;
 
 type Tx = UnboundedSender<Message>;
+type TxTimeout = UnboundedSender<bool>;
 type PeerMap = Arc<Mutex<HashMap<String, Tx>>>;
 type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;
+type UserTimeoutList = Arc<Mutex<HashMap<String, TxTimeout>>>;
 
 #[tokio::main]
 async fn main() -> Result<(), IoError> {
@@ -38,10 +40,17 @@ async fn main() -> Result<(), IoError> {
     let users = UserList::new(Mutex::new(Vec::new()));
     let rooms = RoomList::new(Mutex::new(Vec::new()));
     let games = GameList::new(Mutex::new(HashMap::new()));
+    let user_timeouts = UserTimeoutList::new(Mutex::new(HashMap::new()));
 
     while let Ok((stream, addr)) = listener.accept().await {
         tokio::spawn(handle_connection(
-            (state.clone(), users.clone(), rooms.clone(), games.clone()),
+            (
+                state.clone(),
+                users.clone(),
+                rooms.clone(),
+                games.clone(),
+                user_timeouts.clone(),
+            ),
             stream,
             addr,
         ));

@@ -23,11 +23,13 @@ use tungstenite::Message;
 use uuid::Uuid;
 
 type Tx = UnboundedSender<Message>;
+type TxTimeout = UnboundedSender<bool>;
 type PeerMap = Arc<Mutex<HashMap<String, Tx>>>;
 type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;
-type Lists = (PeerMap, UserList, RoomList, GameList);
+type UserTimeoutList = Arc<Mutex<HashMap<String, TxTimeout>>>;
+type Lists = (PeerMap, UserList, RoomList, GameList, UserTimeoutList);
 type MutexId = Arc<Mutex<String>>;
 
 pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: SocketAddr) {
@@ -133,7 +135,32 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         Some(user_id) => {
             println!("Starting user removal");
             // CHANGE TO TIMER IN COMMON TIMER-MANAGING THREAD
-            handle_user_timeout(user_id, lists.1.clone(), lists.0.clone()).await;
+            // let (tx_timeout, rx_timeout) = unbounded();
+            // lists
+            //     .4
+            //     .lock()
+            //     .unwrap()
+            //     .insert(user_id.clone(), tx_timeout.clone());
+            // tokio::spawn(handle_user_timeout(
+            //     user_id,
+            //     lists.1.clone(),
+            //     lists.0.clone(),
+            //     rx_timeout,
+            // ));
+
+            let user_index = lists
+                .1
+                .lock()
+                .unwrap()
+                .iter()
+                .position(|user| user.id == user_id);
+
+            match user_index {
+                Some(index) => {
+                    lists.1.lock().unwrap().remove(index);
+                }
+                None => (),
+            }
         }
         None => (),
     }
