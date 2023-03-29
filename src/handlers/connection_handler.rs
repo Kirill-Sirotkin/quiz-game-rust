@@ -123,19 +123,19 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         None => None,
     };
 
+    lists
+        .0
+        .lock()
+        .unwrap()
+        .remove(&connection_id.lock().unwrap().clone());
+
     match user_id {
         Some(user_id) => {
             println!("Starting user removal");
             // CHANGE TO TIMER IN COMMON TIMER-MANAGING THREAD
             handle_user_timeout(user_id, lists.1.clone(), lists.0.clone()).await;
         }
-        None => {
-            lists
-                .0
-                .lock()
-                .unwrap()
-                .remove(&connection_id.lock().unwrap().clone());
-        }
+        None => (),
     }
 
     match room_id {

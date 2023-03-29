@@ -2,6 +2,7 @@ use crate::{
     helpers::get_list_element,
     models::lobby::{Room, User},
 };
+use core::time;
 use futures_channel::mpsc::UnboundedSender;
 use futures_timer::Delay;
 use log::info;
@@ -55,7 +56,7 @@ pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map:
     // THIS LEADS TO PREMATURE REMOVAL AT THE TIME, WHEN USER IS RECONNECTING.
     // THUS THE USER GETS BUGGED
 
-    // TRY FIX BY EXTENDING THIS THREAD'S TIMER
+    // TRY FIX BY EXTENDING THIS THREAD'S TIMER?
 
     if !peer_map.lock().unwrap().contains_key(&user_id) {
         println!("Removing user: {}", &user_id);
@@ -69,12 +70,12 @@ pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map:
 
         match index {
             Some(index) => {
-                user_list.lock().unwrap().remove(index);
+                if !peer_map.lock().unwrap().contains_key(&user_id) {
+                    user_list.lock().unwrap().remove(index);
+                }
             }
             None => println!("No index found for user!"),
         };
-
-        peer_map.lock().unwrap().remove(&user_id);
     } else {
         println!("NOT removing user: {}", &user_id);
     }
