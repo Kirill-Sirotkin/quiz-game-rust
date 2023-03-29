@@ -690,20 +690,16 @@ pub fn execute_authorized_command(
                 }
             };
 
+            let mut peer_map_lock = lists.0.lock().unwrap();
+
             // Remove and re-insert tx channel with id from token
-            lists
-                .0
-                .lock()
-                .unwrap()
-                .remove(&connection_id.lock().unwrap().clone());
-            lists
-                .0
-                .lock()
-                .unwrap()
-                .insert(token_info.id.clone(), connection_channel);
+            peer_map_lock.remove(&connection_id.lock().unwrap().clone());
+            peer_map_lock.insert(token_info.id.clone(), connection_channel);
 
             // Change connection ID for connection handler
             *connection_id.lock().unwrap() = token_info.id.clone();
+
+            drop(peer_map_lock);
 
             // Add user to room
             let user_list = match connect_user_to_room(
