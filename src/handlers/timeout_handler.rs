@@ -71,7 +71,10 @@ pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map:
         match index {
             Some(index) => {
                 if !peer_map.lock().unwrap().contains_key(&user_id) {
+                    println!("Definitely removing user: {}", &user_id);
                     user_list.lock().unwrap().remove(index);
+                } else {
+                    println!("Changed my mind: {}", &user_id);
                 }
             }
             None => println!("No index found for user!"),
