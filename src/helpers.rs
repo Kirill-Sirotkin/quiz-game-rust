@@ -66,6 +66,28 @@ pub fn connect_user_to_room(
         }
     }
 
+    let room_info = get_list_element(room_id, lists.2.clone());
+    match room_info {
+        Some(room) => {
+            if room.current_players == 1 {
+                match edit_list_element(user_id, lists.1.clone(), |user| {
+                    user.isHost = true;
+                }) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        let response = Response::errorResponse {
+                            errorText: error.clone(),
+                            errorCode: 0,
+                        };
+                        send_message(response, lists.0.clone(), user_id);
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        None => todo!(),
+    }
+
     let user_list = get_room_user_list(room_id, lists.1.clone());
 
     let user_list_response = Response::updateUserList {

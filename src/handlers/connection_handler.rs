@@ -1,7 +1,7 @@
 use crate::{
     handlers::{
         command_handler::{execute_authorized_command, execute_unauthorized_command},
-        timeout_handler::{handle_room_timeout, handle_user_timeout},
+        timeout_handler::handle_room_timeout,
     },
     helpers::{edit_list_element, get_list_element, get_room_user_list, parse_command},
     models::{
@@ -13,6 +13,7 @@ use crate::{
 use futures_channel::mpsc::{unbounded, UnboundedSender};
 use futures_util::{future, pin_mut, StreamExt, TryStreamExt};
 use log::{info, warn};
+use rand::seq::SliceRandom;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -147,6 +148,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
             //     lists.0.clone(),
             //     rx_timeout,
             // ));
+            let user_info = get_list_element(&user_id, lists.1.clone());
 
             let user_index = lists
                 .1
@@ -160,6 +162,33 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                     lists.1.lock().unwrap().remove(index);
                 }
                 None => (),
+            }
+
+            match user_info {
+                Some(user) => {
+                    if user.isHost {
+                        println!("Host disconnected!");
+                        // Swap host
+                        let room_users = get_room_user_list(&user.roomId, lists.1.clone());
+                        let random_user = room_users.choose(&mut rand::thread_rng());
+
+                        match random_user {
+                            Some(user) => {
+                                println!("Making {} host", &user.name);
+                                edit_list_element(&user.id, lists.1.clone(), |user| {
+                                    user.isHost = true;
+                                })
+                                .unwrap();
+                            }
+                            None => {
+                                println!("Random user not found");
+                            }
+                        }
+                    } else {
+                        println!("User was not host");
+                    }
+                }
+                None => println!("No user info found"),
             }
         }
         None => (),
