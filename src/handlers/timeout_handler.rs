@@ -24,7 +24,7 @@ type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 
 pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
-    Delay::new(Duration::from_secs(5)).await;
+    Delay::new(Duration::from_secs(10)).await;
 
     let room_info = match get_list_element(&room_id, room_list.clone()) {
         Some(info) => info,
