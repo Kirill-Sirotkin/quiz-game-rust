@@ -740,7 +740,18 @@ pub fn execute_authorized_command(
         }
         AuthorizedCommand::startGame { packPath } => (),
         AuthorizedCommand::getUserList {} => (),
-        AuthorizedCommand::broadcastMessage { text } => (),
+        AuthorizedCommand::broadcastMessage { text } => {
+            // Broadcast to everybody in the room
+            let response = Response::newMessage {
+                author: token_info.id,
+                text: text,
+            };
+            broadcast_message_room_all(
+                response,
+                lists.0.clone(),
+                &get_room_user_list(&token_info.roomId, lists.1.clone()),
+            );
+        }
         AuthorizedCommand::writeAnswer { answer } => (),
         AuthorizedCommand::changeUsername { newName } => (),
         AuthorizedCommand::changeAvatar { newAvatarPath } => (),
