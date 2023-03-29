@@ -654,8 +654,10 @@ pub fn execute_authorized_command(
 
     match command_token_pair.command {
         AuthorizedCommand::reconnectRoom {} => {
+            let mut peer_map_lock = lists.0.lock().unwrap();
+
             // Return if connection is active
-            if lists.0.lock().unwrap().contains_key(&token_info.id) {
+            if peer_map_lock.contains_key(&token_info.id) {
                 let response = Response::errorResponse {
                     errorText: "User already active".to_string(),
                     errorCode: 0,
@@ -669,11 +671,7 @@ pub fn execute_authorized_command(
             }
 
             // Return if this connection has no tx channel
-            let connection_channel = match lists
-                .0
-                .lock()
-                .unwrap()
-                .get(&connection_id.lock().unwrap().clone())
+            let connection_channel = match peer_map_lock.get(&connection_id.lock().unwrap().clone())
             {
                 Some(tx) => tx.clone(),
                 None => {
@@ -689,8 +687,6 @@ pub fn execute_authorized_command(
                     return;
                 }
             };
-
-            let mut peer_map_lock = lists.0.lock().unwrap();
 
             // Remove and re-insert tx channel with id from token
             peer_map_lock.remove(&connection_id.lock().unwrap().clone());
