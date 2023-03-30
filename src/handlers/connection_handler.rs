@@ -36,9 +36,9 @@ type MutexId = Arc<Mutex<String>>;
 pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: SocketAddr) {
     info!("Incoming TCP connection from: {}", &addr);
 
-    for timeout in lists.4.lock().unwrap().iter().map(|(_, ws_sink)| ws_sink) {
-        timeout.unbounded_send(true).unwrap();
-    }
+    // for timeout in lists.4.lock().unwrap().iter().map(|(_, ws_sink)| ws_sink) {
+    //     timeout.unbounded_send(true).unwrap();
+    // }
 
     let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
         Ok(stream) => stream,
