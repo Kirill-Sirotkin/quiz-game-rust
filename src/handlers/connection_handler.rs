@@ -146,12 +146,13 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                 .lock()
                 .unwrap()
                 .insert(user_id.clone(), tx_timeout.clone());
-            tokio::spawn(handle_user_timeout(
+            handle_user_timeout(
                 user_id.clone(),
                 lists.1.clone(),
                 lists.0.clone(),
                 rx_timeout,
-            ));
+            )
+            .await;
 
             let user_info = get_list_element(&user_id, lists.1.clone());
 
@@ -215,7 +216,22 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
             let room_info = get_list_element(&room_id, lists.2.clone()).unwrap();
             if room_info.current_players <= 0 {
                 println!("Starting room removal");
-                tokio::spawn(handle_room_timeout(room_id.clone(), lists.2.clone()));
+                // tokio::spawn(handle_room_timeout(room_id.clone(), lists.2.clone()));
+                println!("Removing room: {}", &room_id);
+                info!("Removing room: {}", &room_id);
+
+                let index = lists
+                    .2
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .position(|room| room.id == room_id);
+                match index {
+                    Some(index) => {
+                        lists.2.lock().unwrap().remove(index);
+                    }
+                    None => println!("No index found for room!"),
+                }
             }
         }
         None => (),
