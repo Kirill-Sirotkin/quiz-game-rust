@@ -749,7 +749,115 @@ pub fn execute_authorized_command(
             };
             send_message(user_list_response, lists.0.clone(), &token_info.id);
         }
-        AuthorizedCommand::startGame { packPath } => (),
+        AuthorizedCommand::startGame { packPath } => {
+            info!(
+                "Start game command from: {}",
+                &connection_id.lock().unwrap().clone()
+            );
+
+            // Return error if user doesn't exists
+            match get_list_element(&connection_id.lock().unwrap().clone(), lists.1.clone()) {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorResponse {
+                        errorText: "User already exists".to_string(),
+                        errorCode: 0,
+                    };
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
+                    return;
+                }
+            }
+
+            // Return error if game exists (i.e. is in progress)
+            if lists.3.lock().unwrap().contains_key(&token_info.roomId) {
+                let response = Response::errorResponse {
+                    errorText: "Game in progress".to_string(),
+                    errorCode: 0,
+                };
+                send_message(
+                    response,
+                    lists.0.clone(),
+                    &connection_id.lock().unwrap().clone(),
+                );
+                return;
+            }
+
+            // Return error if user is not host
+            if !token_info.isHost {
+                let response = Response::errorResponse {
+                    errorText: "Only host can start game".to_string(),
+                    errorCode: 0,
+                };
+                send_message(
+                    response,
+                    lists.0.clone(),
+                    &connection_id.lock().unwrap().clone(),
+                );
+                return;
+            }
+
+            // Broadcast to the room that the game has started
+            let broadcast_response = Response::startGame {};
+            broadcast_message_room_all(
+                broadcast_response,
+                lists.0.clone(),
+                &get_room_user_list(&token_info.roomId.clone(), lists.1.clone()),
+            );
+
+            // Read pack data from file to string, return error if did not work
+            // previously: fs::read_to_string("./packs/test.json")
+            let data = match fs::read_to_string(packPath) {
+                Ok(data) => data,
+                Err(error) => {
+                    let response = Response::errorResponse {
+                        errorText: error.to_string(),
+                        errorCode: 0,
+                    };
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
+                    return;
+                }
+            };
+
+            // Transform pack data to Pack object, return error if did not work
+            let pack: Pack = match serde_json::from_str(&data) {
+                Ok(pack) => pack,
+                Err(error) => {
+                    let response = Response::errorResponse {
+                        errorText: error.to_string(),
+                        errorCode: 0,
+                    };
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
+                    return;
+                }
+            };
+
+            // Spawn a thread to handle game
+            tokio::spawn(handle_game(
+                (
+                    lists.0.clone(),
+                    lists.1.clone(),
+                    lists.2.clone(),
+                    lists.3.clone(),
+                ),
+                get_room_user_list(&token_info.roomId.clone(), lists.1.clone()),
+                token_info.roomId.clone(),
+                pack,
+            ));
+
+            info!("Loading pack success");
+        }
         AuthorizedCommand::getUserList {} => (),
         AuthorizedCommand::broadcastMessage { text } => {
             // Broadcast to everybody in the room
