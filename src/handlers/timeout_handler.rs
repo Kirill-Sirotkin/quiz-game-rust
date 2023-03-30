@@ -55,12 +55,7 @@ pub async fn handle_room_timeout(room_id: String, room_list: RoomList) {
     }
 }
 
-pub async fn handle_user_timeout(
-    user_id: String,
-    user_list: UserList,
-    peer_map: PeerMap,
-    mut rx: UnboundedReceiver<bool>,
-) {
+pub async fn handle_user_timeout(user_id: String, user_list: UserList, peer_map: PeerMap) {
     // let timer = Delay::new(Duration::from_secs(10));
     Delay::new(Duration::from_secs(10)).await;
 

@@ -1,8 +1,5 @@
 use crate::{
-    handlers::{
-        command_handler::{execute_authorized_command, execute_unauthorized_command},
-        timeout_handler::{handle_room_timeout, handle_user_timeout},
-    },
+    handlers::command_handler::{execute_authorized_command, execute_unauthorized_command},
     helpers::{edit_list_element, get_list_element, get_room_user_list, parse_command},
     models::{
         communication::{Command, Response},
@@ -35,10 +32,6 @@ type MutexId = Arc<Mutex<String>>;
 
 pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: SocketAddr) {
     info!("Incoming TCP connection from: {}", &addr);
-
-    // for timeout in lists.4.lock().unwrap().iter().map(|(_, ws_sink)| ws_sink) {
-    //     timeout.unbounded_send(true).unwrap();
-    // }
 
     let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
         Ok(stream) => stream,
@@ -138,22 +131,6 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
 
     match user_id {
         Some(user_id) => {
-            println!("Starting user removal");
-            // CHANGE TO TIMER IN COMMON TIMER-MANAGING THREAD
-            let (tx_timeout, rx_timeout) = unbounded();
-            lists
-                .4
-                .lock()
-                .unwrap()
-                .insert(user_id.clone(), tx_timeout.clone());
-            handle_user_timeout(
-                user_id.clone(),
-                lists.1.clone(),
-                lists.0.clone(),
-                rx_timeout,
-            )
-            .await;
-
             let user_info = get_list_element(&user_id, lists.1.clone());
 
             let user_index = lists
@@ -165,6 +142,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
 
             match user_index {
                 Some(index) => {
+                    println!("Removing user");
                     lists.1.lock().unwrap().remove(index);
                 }
                 None => (),
@@ -174,7 +152,6 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                 Some(user) => {
                     if user.isHost {
                         println!("Host disconnected!");
-                        // Swap host
                         let room_users = get_room_user_list(&user.roomId, lists.1.clone());
                         let random_user = room_users.choose(&mut rand::thread_rng());
 
@@ -215,8 +192,6 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
 
             let room_info = get_list_element(&room_id, lists.2.clone()).unwrap();
             if room_info.current_players <= 0 {
-                println!("Starting room removal");
-                // tokio::spawn(handle_room_timeout(room_id.clone(), lists.2.clone()));
                 println!("Removing room: {}", &room_id);
                 info!("Removing room: {}", &room_id);
 
