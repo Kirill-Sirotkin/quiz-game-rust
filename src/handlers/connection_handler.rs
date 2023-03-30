@@ -1,7 +1,7 @@
 use crate::{
     handlers::{
         command_handler::{execute_authorized_command, execute_unauthorized_command},
-        timeout_handler::handle_room_timeout,
+        timeout_handler::{handle_room_timeout, handle_user_timeout},
     },
     helpers::{edit_list_element, get_list_element, get_room_user_list, parse_command},
     models::{
@@ -35,6 +35,10 @@ type MutexId = Arc<Mutex<String>>;
 
 pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: SocketAddr) {
     info!("Incoming TCP connection from: {}", &addr);
+
+    for timeout in lists.4.lock().unwrap().iter().map(|(_, ws_sink)| ws_sink) {
+        timeout.unbounded_send(true).unwrap();
+    }
 
     let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
         Ok(stream) => stream,
@@ -136,18 +140,19 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         Some(user_id) => {
             println!("Starting user removal");
             // CHANGE TO TIMER IN COMMON TIMER-MANAGING THREAD
-            // let (tx_timeout, rx_timeout) = unbounded();
-            // lists
-            //     .4
-            //     .lock()
-            //     .unwrap()
-            //     .insert(user_id.clone(), tx_timeout.clone());
-            // tokio::spawn(handle_user_timeout(
-            //     user_id,
-            //     lists.1.clone(),
-            //     lists.0.clone(),
-            //     rx_timeout,
-            // ));
+            let (tx_timeout, rx_timeout) = unbounded();
+            lists
+                .4
+                .lock()
+                .unwrap()
+                .insert(user_id.clone(), tx_timeout.clone());
+            tokio::spawn(handle_user_timeout(
+                user_id.clone(),
+                lists.1.clone(),
+                lists.0.clone(),
+                rx_timeout,
+            ));
+
             let user_info = get_list_element(&user_id, lists.1.clone());
 
             let user_index = lists

@@ -4,16 +4,18 @@ use crate::{
 };
 use core::time;
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures_delay_queue::delay_queue;
 use futures_timer::Delay;
 use futures_util::{
     future::{self, ok, Pending},
-    pin_mut, StreamExt,
+    pin_mut, poll, FutureExt, StreamExt,
 };
 use log::info;
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
+    task::Context,
     time::Duration,
 };
 use tungstenite::Message;
@@ -59,32 +61,43 @@ pub async fn handle_user_timeout(
     peer_map: PeerMap,
     mut rx: UnboundedReceiver<bool>,
 ) {
-    let timer = Delay::new(Duration::from_secs(10));
+    // let timer = Delay::new(Duration::from_secs(10));
+    Delay::new(Duration::from_secs(10)).await;
+
+    // let (delay_queue, rxx) = delay_queue::<String>();
+    // let delay_handle = delay_queue.insert("COMPLETE!!!!".to_string(), Duration::from_secs(10));
+    // let timer_recv = rxx.receive();
 
     // let receive_future = rx.for_each(|msg| {
     //     match msg {
     //         true => {
     //             println!("Received future reset!");
-    //             timer.reset(Duration::from_secs(10));
-    //             tokio::spawn(future)
     //         }
     //         false => (),
     //     }
     //     future::ready(())
     // });
 
-    // while true {
+    // loop {
     //     let msg = rx.next().await;
 
     //     match msg {
     //         Some(msg) => {
-    //             println!("Received timeout message: {}", msg)
+    //             println!("Received timeout message: {}", msg);
+    //             return;
     //         }
     //         None => {
     //             println!("Connection stopped")
     //         }
     //     }
     // }
+
+    // pin_mut!(timer_recv, receive_future);
+    // future::select(timer_recv, receive_future).await;
+    // println!("End of timeout thread");
+
+    // println!("WOW! queue worked!: {:?}", rxx.receive().await);
+    // println!("End of timeout thread");
 
     // IF USER DISCONNECTS AS TIMEOUTS ARE CHECKING PEERMAP TO CONTAIN KEY,
     // THEN THE KEY WILL NOT EXIST, EVEN THOUGH TECHNICALLY USER DOES EXISTS.
