@@ -708,17 +708,18 @@ pub fn execute_authorized_command(
                         errorCode: 2,
                     };
                     send_message(response, lists.0.clone(), &token_info.id);
+                    return;
 
-                    let remade_user = User {
-                        id: token_info.id.clone(),
-                        name: token_info.name.clone(),
-                        avatarPath: token_info.avatarPath.clone(),
-                        roomId: token_info.roomId.clone(),
-                        isHost: token_info.isHost,
-                        userColor: token_info.userColor.clone(),
-                    };
+                    // let remade_user = User {
+                    //     id: token_info.id.clone(),
+                    //     name: token_info.name.clone(),
+                    //     avatarPath: token_info.avatarPath.clone(),
+                    //     roomId: token_info.roomId.clone(),
+                    //     isHost: token_info.isHost,
+                    //     userColor: token_info.userColor.clone(),
+                    // };
 
-                    lists.1.lock().unwrap().push(remade_user);
+                    // lists.1.lock().unwrap().push(remade_user);
                 }
             }
 

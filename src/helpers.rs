@@ -9,7 +9,7 @@ use crate::{
         game::GameCommand,
         lobby::{HasId, Room, User},
     },
-    server_messages::{broadcast_message_room_except, send_message},
+    server_messages::broadcast_message_room_except,
 };
 use futures_channel::mpsc::UnboundedSender;
 use tungstenite::Message;
@@ -57,12 +57,7 @@ pub fn connect_user_to_room(
     }) {
         Ok(_) => (),
         Err(error) => {
-            let response = Response::errorResponse {
-                errorText: error.clone(),
-                errorCode: 0,
-            };
-            send_message(response, lists.0.clone(), user_id);
-            return Err(error);
+            return Err(format!("connect_user_to_room: {}", error));
         }
     }
 
@@ -75,12 +70,7 @@ pub fn connect_user_to_room(
                 }) {
                     Ok(_) => (),
                     Err(error) => {
-                        let response = Response::errorResponse {
-                            errorText: error.clone(),
-                            errorCode: 0,
-                        };
-                        send_message(response, lists.0.clone(), user_id);
-                        return Err(error);
+                        return Err(format!("connect_user_to_room: {}", error));
                     }
                 }
             }
@@ -133,7 +123,7 @@ where
     let mut elements = list.lock().unwrap();
     let target_element = match elements.iter_mut().find(|element| &element.get_id() == id) {
         Some(element) => element,
-        None => return Err("Element does not exist in list".to_string()),
+        None => return Err("edit_list_element: Element does not exist in list".to_string()),
     };
 
     function(target_element);

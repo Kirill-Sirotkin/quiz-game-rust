@@ -1,5 +1,8 @@
 use crate::{
-    handlers::command_handler::{execute_authorized_command, execute_unauthorized_command},
+    handlers::{
+        command_handler::{execute_authorized_command, execute_unauthorized_command},
+        timeout_handler::handle_user_timeout,
+    },
     helpers::{edit_list_element, get_list_element, get_room_user_list, parse_command},
     models::{
         communication::{Command, Response},
@@ -123,6 +126,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         None => None,
     };
 
+    // Remove connection from list
     lists
         .0
         .lock()
@@ -143,7 +147,29 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
             match user_index {
                 Some(index) => {
                     println!("Removing user");
-                    lists.1.lock().unwrap().remove(index);
+                    // lists.1.lock().unwrap().remove(index);
+
+                    let (tx_timeout, rx_timeout) = unbounded();
+                    let timeout = lists.4.lock().unwrap().get(&user_id).cloned();
+
+                    match timeout {
+                        Some(tx) => {
+                            match tx.unbounded_send(false) {
+                                Ok(res) => (),
+                                Err(error) => println!("Could not send: {}", error),
+                            }
+                            lists.4.lock().unwrap().remove(&user_id);
+                        }
+                        None => (),
+                    }
+
+                    lists.4.lock().unwrap().insert(user_id.clone(), tx_timeout);
+                    tokio::spawn(handle_user_timeout(
+                        user_id.clone(),
+                        room_id.unwrap().clone(),
+                        (lists.0.clone(), lists.1.clone(), lists.2.clone()),
+                        rx_timeout,
+                    ));
                 }
                 None => (),
             }
@@ -177,38 +203,38 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         None => (),
     }
 
-    match room_id {
-        Some(room_id) => {
-            edit_list_element(&room_id, lists.2.clone(), |room| {
-                room.current_players -= 1;
-            })
-            .unwrap();
+    // match room_id {
+    //     Some(room_id) => {
+    //         edit_list_element(&room_id, lists.2.clone(), |room| {
+    //             room.current_players -= 1;
+    //         })
+    //         .unwrap();
 
-            let user_list = get_room_user_list(&room_id, lists.1.clone());
-            let update_user_list_response = Response::updateUserList {
-                userList: user_list.clone(),
-            };
-            broadcast_message_room_all(update_user_list_response, lists.0.clone(), &user_list);
+    //         let user_list = get_room_user_list(&room_id, lists.1.clone());
+    //         let update_user_list_response = Response::updateUserList {
+    //             userList: user_list.clone(),
+    //         };
+    //         broadcast_message_room_all(update_user_list_response, lists.0.clone(), &user_list);
 
-            let room_info = get_list_element(&room_id, lists.2.clone()).unwrap();
-            if room_info.current_players <= 0 {
-                println!("Removing room: {}", &room_id);
-                info!("Removing room: {}", &room_id);
+    //         let room_info = get_list_element(&room_id, lists.2.clone()).unwrap();
+    //         if room_info.current_players <= 0 {
+    //             println!("Removing room: {}", &room_id);
+    //             info!("Removing room: {}", &room_id);
 
-                let index = lists
-                    .2
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .position(|room| room.id == room_id);
-                match index {
-                    Some(index) => {
-                        lists.2.lock().unwrap().remove(index);
-                    }
-                    None => println!("No index found for room!"),
-                }
-            }
-        }
-        None => (),
-    }
+    //             let index = lists
+    //                 .2
+    //                 .lock()
+    //                 .unwrap()
+    //                 .iter()
+    //                 .position(|room| room.id == room_id);
+    //             match index {
+    //                 Some(index) => {
+    //                     lists.2.lock().unwrap().remove(index);
+    //                 }
+    //                 None => println!("No index found for room!"),
+    //             }
+    //         }
+    //     }
+    //     None => (),
+    // }
 }
