@@ -477,11 +477,21 @@ pub fn execute_unauthorized_command(
 
                     let response = Response::createRoomResponse {
                         token: create_room.1,
-                        userList: user_list,
+                        userList: user_list.clone(),
                     };
                     send_message(
                         response,
                         lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
+
+                    let user_list_response = Response::updateUserList {
+                        userList: user_list.clone(),
+                    };
+                    broadcast_message_room_except(
+                        user_list_response,
+                        lists.0.clone(),
+                        &user_list,
                         &connection_id.lock().unwrap().clone(),
                     );
                 }
@@ -593,11 +603,21 @@ pub fn execute_unauthorized_command(
 
                     let token_response = Response::joinRoomResponse {
                         token: join_room.1,
-                        userList: user_list,
+                        userList: user_list.clone(),
                     };
                     send_message(
                         token_response,
                         lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
+
+                    let user_list_response = Response::updateUserList {
+                        userList: user_list.clone(),
+                    };
+                    broadcast_message_room_except(
+                        user_list_response,
+                        lists.0.clone(),
+                        &user_list,
                         &connection_id.lock().unwrap().clone(),
                     );
                 }
@@ -702,30 +722,9 @@ pub fn execute_authorized_command(
                 }
             }
 
-            // Add user to room
-            let user_list = match connect_user_to_room(
-                &token_info.roomId,
-                &token_info.id,
-                (lists.0.clone(), lists.1.clone(), lists.2.clone()),
-            ) {
-                Ok(list) => list,
-                Err(error) => {
-                    let response = Response::errorResponse {
-                        errorText: error,
-                        errorCode: 0,
-                    };
-                    send_message(
-                        response,
-                        lists.0.clone(),
-                        &connection_id.lock().unwrap().clone(),
-                    );
-                    return;
-                }
-            };
-
             // Respond with room user list
             let user_list_response = Response::updateUserList {
-                userList: user_list.clone(),
+                userList: get_room_user_list(&token_info.roomId, lists.1.clone()).clone(),
             };
             send_message(user_list_response, lists.0.clone(), &token_info.id);
         }

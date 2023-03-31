@@ -3,13 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{
-    models::{
-        communication::{Command, Response},
-        game::GameCommand,
-        lobby::{HasId, Room, User},
-    },
-    server_messages::broadcast_message_room_except,
+use crate::models::{
+    communication::Command,
+    game::GameCommand,
+    lobby::{HasId, Room, User},
 };
 use futures_channel::mpsc::UnboundedSender;
 use tungstenite::Message;
@@ -78,14 +75,7 @@ pub fn connect_user_to_room(
         None => (),
     }
 
-    let user_list = get_room_user_list(room_id, lists.1.clone());
-
-    let user_list_response = Response::updateUserList {
-        userList: user_list.clone(),
-    };
-    broadcast_message_room_except(user_list_response, lists.0.clone(), &user_list, user_id);
-
-    Ok(user_list)
+    Ok(get_room_user_list(room_id, lists.1.clone()))
 }
 
 pub fn get_room_user_list(room_id: &String, user_list: UserList) -> Vec<User> {

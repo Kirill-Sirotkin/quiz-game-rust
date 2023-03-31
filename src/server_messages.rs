@@ -1,7 +1,6 @@
 use log::info;
 use std::{
     collections::HashMap,
-    net::SocketAddr,
     sync::{Arc, Mutex},
 };
 
@@ -30,7 +29,7 @@ pub fn send_message(response: Response, peer_map: PeerMap, id: &String) {
     info!("Message sent successfully to: {}", &id);
 }
 
-pub fn broadcast_message_all(response: Response, peer_map: &PeerMap) {
+pub fn broadcast_message_all(response: Response, peer_map: PeerMap) {
     info!("Sending broadcast to all connections");
     let peers = peer_map.lock().unwrap();
     let broadcast_recipients = peers.iter().map(|(_, ws_sink)| ws_sink);
@@ -42,18 +41,18 @@ pub fn broadcast_message_all(response: Response, peer_map: &PeerMap) {
     info!("Broadcast sent successfully to all connections");
 }
 
-pub fn broadcast_message_except(response: Response, peer_map: PeerMap, addr: &SocketAddr) {
+pub fn broadcast_message_except(response: Response, peer_map: PeerMap, addr: &String) {
     info!("Sending broadcast to all connections except: {}", &addr);
-    // let peers = peer_map.lock().unwrap();
-    // let broadcast_recipients = peers
-    //     .iter()
-    //     .filter(|(peer_addr, _)| peer_addr != &addr)
-    //     .map(|(_, ws_sink)| ws_sink);
+    let peers = peer_map.lock().unwrap();
+    let broadcast_recipients = peers
+        .iter()
+        .filter(|(peer_addr, _)| peer_addr != &addr)
+        .map(|(_, ws_sink)| ws_sink);
 
-    // for recp in broadcast_recipients {
-    //     recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
-    //         .unwrap();
-    // }
+    for recp in broadcast_recipients {
+        recp.unbounded_send(Message::Text(serde_json::to_string(&response).unwrap()))
+            .unwrap();
+    }
     info!(
         "Broadcast sent successfully to all connections except: {}",
         &addr

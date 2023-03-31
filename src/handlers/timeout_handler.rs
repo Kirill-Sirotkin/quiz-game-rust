@@ -13,6 +13,7 @@ use futures_util::{
     pin_mut, StreamExt,
 };
 use log::info;
+use rand::seq::SliceRandom;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -70,10 +71,12 @@ pub async fn handle_user_timeout(
 
     pin_mut!(timer, receive_future);
     let select = future::select(timer, receive_future).await;
+
     match select {
         future::Either::Left(_) => {
             println!("Timer finished first!");
 
+            let user_info = get_list_element(&user_id, lists.1.clone());
             if !lists.0.lock().unwrap().contains_key(&user_id) {
                 println!("Removing user: {}", &user_id);
                 info!("Removing user: {}", &user_id);
@@ -92,6 +95,33 @@ pub async fn handle_user_timeout(
                             room.current_players -= 1;
                         })
                         .unwrap();
+
+                        match user_info {
+                            Some(user) => {
+                                if user.isHost {
+                                    println!("Host disconnected!");
+                                    let room_users =
+                                        get_room_user_list(&user.roomId, lists.1.clone());
+                                    let random_user = room_users.choose(&mut rand::thread_rng());
+
+                                    match random_user {
+                                        Some(user) => {
+                                            println!("Making {} host", &user.name);
+                                            edit_list_element(&user.id, lists.1.clone(), |user| {
+                                                user.isHost = true;
+                                            })
+                                            .unwrap();
+                                        }
+                                        None => {
+                                            println!("Random user not found");
+                                        }
+                                    }
+                                } else {
+                                    println!("User was not host");
+                                }
+                            }
+                            None => println!("No user info found"),
+                        }
 
                         let user_list = get_room_user_list(&room_id, lists.1.clone());
                         let update_user_list_response = Response::updateUserList {
