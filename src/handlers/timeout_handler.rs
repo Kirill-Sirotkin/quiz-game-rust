@@ -6,20 +6,16 @@ use crate::{
     },
     server_messages::broadcast_message_room_all,
 };
-use core::time;
-use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
-use futures_delay_queue::delay_queue;
+use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_timer::Delay;
 use futures_util::{
-    future::{self, ok, Pending},
-    pin_mut, poll, FutureExt, StreamExt,
+    future::{self},
+    pin_mut, StreamExt,
 };
 use log::info;
 use std::{
     collections::HashMap,
-    ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
-    task::Context,
     time::Duration,
 };
 use tungstenite::Message;
@@ -66,54 +62,11 @@ pub async fn handle_user_timeout(
     lists: Lists,
     rx: UnboundedReceiver<bool>,
 ) {
-    // let timer = Delay::new(Duration::from_secs(10));
     let timer = Delay::new(Duration::from_secs(10));
-
-    // let (delay_queue, rxx) = delay_queue::<String>();
-    // let delay_handle = delay_queue.insert("COMPLETE!!!!".to_string(), Duration::from_secs(10));
-    // let timer_recv = rxx.receive();
-
-    // let receive_future = rx.for_each(|msg| {
-    //     match msg {
-    //         true => {
-    //             println!("Received future reset!");
-    //         }
-    //         false => (),
-    //     }
-    //     future::ready(())
-    // });
 
     let receive_future = rx
         .take_while(|msg| future::ready(msg.clone()))
         .into_future();
-
-    // loop {
-    //     let msg = rx.next().await;
-
-    //     match msg {
-    //         Some(msg) => {
-    //             println!("Received timeout message: {}", msg);
-    //             return;
-    //         }
-    //         None => {
-    //             println!("Connection stopped")
-    //         }
-    //     }
-    // }
-
-    // pin_mut!(timer_recv, receive_future);
-    // future::select(timer_recv, receive_future).await;
-    // println!("End of timeout thread");
-
-    // println!("WOW! queue worked!: {:?}", rxx.receive().await);
-    // println!("End of timeout thread");
-
-    // IF USER DISCONNECTS AS TIMEOUTS ARE CHECKING PEERMAP TO CONTAIN KEY,
-    // THEN THE KEY WILL NOT EXIST, EVEN THOUGH TECHNICALLY USER DOES EXISTS.
-    // THIS LEADS TO PREMATURE REMOVAL AT THE TIME, WHEN USER IS RECONNECTING.
-    // THUS THE USER GETS BUGGED
-
-    // TRY FIX BY EXTENDING THIS THREAD'S TIMER?
 
     pin_mut!(timer, receive_future);
     let select = future::select(timer, receive_future).await;

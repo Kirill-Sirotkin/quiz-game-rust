@@ -1,24 +1,22 @@
 use crate::{
     handlers::game_handler::handle_game,
-    helpers::{connect_user_to_room, edit_list_element, get_list_element, get_room_user_list},
-    jwtoken::{decode_token, generate_token, Claims},
+    helpers::{connect_user_to_room, get_list_element, get_room_user_list},
+    jwtoken::{decode_token, generate_token},
     models::{
         communication::{AuthorizedCommand, CommandTokenPair, Response, UnauthorizedCommand},
         game::*,
-        lobby::{HasId, Room, User, UserColors},
+        lobby::{Room, User, UserColors},
     },
     server_messages::*,
 };
 use futures_channel::mpsc::UnboundedSender;
-use jsonwebtoken::TokenData;
-use log::{info, warn};
+use log::info;
 use std::fs;
 use std::{
     collections::HashMap,
-    net::SocketAddr,
     sync::{Arc, Mutex},
 };
-use tungstenite::{http::response, protocol::Message};
+use tungstenite::protocol::Message;
 use uuid::Uuid;
 
 type Tx = UnboundedSender<Message>;
@@ -27,13 +25,6 @@ type UserList = Arc<Mutex<Vec<User>>>;
 type RoomList = Arc<Mutex<Vec<Room>>>;
 type GameList = Arc<Mutex<HashMap<String, Tx>>>;
 type Lists = (PeerMap, UserList, RoomList, GameList);
-type ConnectionInfo<'a> = (
-    &'a (SocketAddr, String),
-    Option<User>,
-    Option<Room>,
-    Option<(String, UnboundedSender<Message>)>,
-    Result<TokenData<Claims>, String>,
-);
 type MutexId = Arc<Mutex<String>>;
 
 // pub fn execute_command(command: &CommandTokenPair, lists: Lists, addr: &SocketAddr) {
@@ -702,24 +693,12 @@ pub fn execute_authorized_command(
             match existing_user {
                 Some(_) => (),
                 None => {
-                    println!("XXXXXX USER NO LONGER EXISTS NOOOOO! XXXXXX");
                     let response = Response::errorResponse {
                         errorText: "User has been removed".to_string(),
                         errorCode: 2,
                     };
                     send_message(response, lists.0.clone(), &token_info.id);
                     return;
-
-                    // let remade_user = User {
-                    //     id: token_info.id.clone(),
-                    //     name: token_info.name.clone(),
-                    //     avatarPath: token_info.avatarPath.clone(),
-                    //     roomId: token_info.roomId.clone(),
-                    //     isHost: token_info.isHost,
-                    //     userColor: token_info.userColor.clone(),
-                    // };
-
-                    // lists.1.lock().unwrap().push(remade_user);
                 }
             }
 
