@@ -666,11 +666,11 @@ pub fn execute_authorized_command(
     match command_token_pair.command {
         AuthorizedCommand::reconnectRoom {} => {
             println!("Started RECONNECT 2.1");
-            let mut peer_map_lock = lists.0.lock().unwrap();
+            // let mut peer_map_lock = lists.0.lock().unwrap();
 
             println!("Locked list of connections 2.1.5");
             // Return if connection is active
-            let peer_map_active = peer_map_lock.contains_key(&token_info.id).clone();
+            let peer_map_active = lists.0.lock().unwrap().contains_key(&token_info.id).clone();
             println!("Got bool for connection active 2.1.5");
             if peer_map_active {
                 let response = Response::errorResponse {
@@ -688,7 +688,11 @@ pub fn execute_authorized_command(
             println!("Done user active check 2.1.5");
 
             // Return if this connection has no tx channel
-            let connection_channel = match peer_map_lock.get(&connection_id.lock().unwrap().clone())
+            let connection_channel = match lists
+                .0
+                .lock()
+                .unwrap()
+                .get(&connection_id.lock().unwrap().clone())
             {
                 Some(tx) => tx.clone(),
                 None => {
@@ -724,13 +728,21 @@ pub fn execute_authorized_command(
             println!("Done user remove check 2.1.5");
 
             // Remove and re-insert tx channel with id from token
-            peer_map_lock.remove(&connection_id.lock().unwrap().clone());
-            peer_map_lock.insert(token_info.id.clone(), connection_channel);
+            lists
+                .0
+                .lock()
+                .unwrap()
+                .remove(&connection_id.lock().unwrap().clone());
+            lists
+                .0
+                .lock()
+                .unwrap()
+                .insert(token_info.id.clone(), connection_channel);
 
             // Change connection ID for connection handler
             *connection_id.lock().unwrap() = token_info.id.clone();
 
-            drop(peer_map_lock);
+            // drop(peer_map_lock);
 
             println!("Insert-reinsert 2.1.5");
             // Respond with room user list
