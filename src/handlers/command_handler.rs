@@ -671,6 +671,7 @@ pub fn execute_authorized_command(
             println!("Locked list of connections 2.1.5");
             // Return if connection is active
             let peer_map_active = peer_map_lock.contains_key(&token_info.id).clone();
+            println!("Got bool for connection active 2.1.5");
             if peer_map_active {
                 let response = Response::errorResponse {
                     errorText: "User already active".to_string(),
