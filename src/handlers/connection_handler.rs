@@ -155,10 +155,13 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         None => (),
     }
 
+    println!("Wanna remove connection 1.1");
     // Remove connection from list
     lists
         .0
         .lock()
         .unwrap()
         .remove(&connection_id.lock().unwrap().clone());
+
+    println!("Removed connection 1.2");
 }

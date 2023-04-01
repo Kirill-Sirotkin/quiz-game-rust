@@ -665,6 +665,7 @@ pub fn execute_authorized_command(
 
     match command_token_pair.command {
         AuthorizedCommand::reconnectRoom {} => {
+            println!("Started RECONNECT 2.1");
             let mut peer_map_lock = lists.0.lock().unwrap();
 
             // Return if connection is active
@@ -727,6 +728,7 @@ pub fn execute_authorized_command(
                 userList: get_room_user_list(&token_info.roomId, lists.1.clone()).clone(),
             };
             send_message(user_list_response, lists.0.clone(), &token_info.id);
+            println!("Finished RECONNECT 2.2");
         }
         AuthorizedCommand::startGame { packPath } => {
             info!(
