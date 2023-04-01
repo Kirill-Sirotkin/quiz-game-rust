@@ -668,6 +668,7 @@ pub fn execute_authorized_command(
             println!("Started RECONNECT 2.1");
             let mut peer_map_lock = lists.0.lock().unwrap();
 
+            println!("Locked list of connections 2.1.5");
             // Return if connection is active
             if peer_map_lock.contains_key(&token_info.id) {
                 let response = Response::errorResponse {
@@ -702,15 +703,6 @@ pub fn execute_authorized_command(
                 }
             };
 
-            // Remove and re-insert tx channel with id from token
-            peer_map_lock.remove(&connection_id.lock().unwrap().clone());
-            peer_map_lock.insert(token_info.id.clone(), connection_channel);
-
-            // Change connection ID for connection handler
-            *connection_id.lock().unwrap() = token_info.id.clone();
-
-            drop(peer_map_lock);
-
             // Check if user has been removed in the meantime
             let existing_user = get_list_element(&token_info.id, lists.1.clone());
             match existing_user {
@@ -725,6 +717,15 @@ pub fn execute_authorized_command(
                     return;
                 }
             }
+
+            // Remove and re-insert tx channel with id from token
+            peer_map_lock.remove(&connection_id.lock().unwrap().clone());
+            peer_map_lock.insert(token_info.id.clone(), connection_channel);
+
+            // Change connection ID for connection handler
+            *connection_id.lock().unwrap() = token_info.id.clone();
+
+            drop(peer_map_lock);
 
             // Respond with room user list
             let user_list_response = Response::updateUserList {
