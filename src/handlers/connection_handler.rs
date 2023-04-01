@@ -125,13 +125,6 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         None => None,
     };
 
-    // Remove connection from list
-    lists
-        .0
-        .lock()
-        .unwrap()
-        .remove(&connection_id.lock().unwrap().clone());
-
     match user_id {
         Some(user_id) => {
             println!("Removing user");
@@ -161,4 +154,11 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
         }
         None => (),
     }
+
+    // Remove connection from list
+    lists
+        .0
+        .lock()
+        .unwrap()
+        .remove(&connection_id.lock().unwrap().clone());
 }
