@@ -683,6 +683,7 @@ pub fn execute_authorized_command(
                 println!("Returned RECONNECT user active 2.3");
                 return;
             }
+            println!("Done user active check 2.1.5");
 
             // Return if this connection has no tx channel
             let connection_channel = match peer_map_lock.get(&connection_id.lock().unwrap().clone())
@@ -702,6 +703,7 @@ pub fn execute_authorized_command(
                     return;
                 }
             };
+            println!("Done connection remove check 2.1.5");
 
             // Check if user has been removed in the meantime
             let existing_user = get_list_element(&token_info.id, lists.1.clone());
@@ -717,7 +719,7 @@ pub fn execute_authorized_command(
                     return;
                 }
             }
-            println!("Done return checks 2.1.5");
+            println!("Done user remove check 2.1.5");
 
             // Remove and re-insert tx channel with id from token
             peer_map_lock.remove(&connection_id.lock().unwrap().clone());
