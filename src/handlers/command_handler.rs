@@ -680,7 +680,7 @@ pub fn execute_authorized_command(
                     lists.0.clone(),
                     &connection_id.lock().unwrap().clone(),
                 );
-                println!("Returned RECONNECT 2.3");
+                println!("Returned RECONNECT user active 2.3");
                 return;
             }
 
@@ -698,7 +698,7 @@ pub fn execute_authorized_command(
                         lists.0.clone(),
                         &connection_id.lock().unwrap().clone(),
                     );
-                    println!("Returned RECONNECT 2.3");
+                    println!("Returned RECONNECT connction channel no longer exists 2.3");
                     return;
                 }
             };
@@ -713,10 +713,11 @@ pub fn execute_authorized_command(
                         errorCode: 2,
                     };
                     send_message(response, lists.0.clone(), &token_info.id);
-                    println!("Returned RECONNECT 2.3");
+                    println!("Returned RECONNECT user no longer exists 2.3");
                     return;
                 }
             }
+            println!("Done return checks 2.1.5");
 
             // Remove and re-insert tx channel with id from token
             peer_map_lock.remove(&connection_id.lock().unwrap().clone());
@@ -727,6 +728,7 @@ pub fn execute_authorized_command(
 
             drop(peer_map_lock);
 
+            println!("Insert-reinsert 2.1.5");
             // Respond with room user list
             let user_list_response = Response::updateUserList {
                 userList: get_room_user_list(&token_info.roomId, lists.1.clone()).clone(),
