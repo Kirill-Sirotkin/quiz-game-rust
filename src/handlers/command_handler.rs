@@ -679,6 +679,7 @@ pub fn execute_authorized_command(
                     lists.0.clone(),
                     &connection_id.lock().unwrap().clone(),
                 );
+                println!("Returned RECONNECT 2.3");
                 return;
             }
 
@@ -696,6 +697,7 @@ pub fn execute_authorized_command(
                         lists.0.clone(),
                         &connection_id.lock().unwrap().clone(),
                     );
+                    println!("Returned RECONNECT 2.3");
                     return;
                 }
             };
@@ -719,6 +721,7 @@ pub fn execute_authorized_command(
                         errorCode: 2,
                     };
                     send_message(response, lists.0.clone(), &token_info.id);
+                    println!("Returned RECONNECT 2.3");
                     return;
                 }
             }
