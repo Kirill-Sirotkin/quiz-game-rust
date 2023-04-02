@@ -41,7 +41,7 @@ pub enum Response {
     },
     correctAnswerResponse {
         answers: HashMap<String, i32>,
-        correct_answer: i32,
+        correctAnswer: i32,
     },
     scoresResponse {
         scores: HashMap<String, i32>,

@@ -79,7 +79,7 @@ pub async fn handle_game(lists: Lists, user_list: Vec<User>, room_id: String, pa
 
             let correct_answer_response = Response::correctAnswerResponse {
                 answers: answers_clone.lock().unwrap().clone(),
-                correct_answer: question.correct_answer,
+                correctAnswer: question.correct_answer,
             };
             broadcast_message_room_all(correct_answer_response, lists.0.clone(), &user_list);
 
