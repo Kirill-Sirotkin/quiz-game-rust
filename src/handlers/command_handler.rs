@@ -762,12 +762,12 @@ pub fn execute_authorized_command(
                 &connection_id.lock().unwrap().clone()
             );
 
-            // Return error if user doesn't exists
+            // Return error if user doesn't exist
             match get_list_element(&connection_id.lock().unwrap().clone(), lists.1.clone()) {
                 Some(_) => (),
                 None => {
                     let response = Response::errorResponse {
-                        errorText: "User already exists".to_string(),
+                        errorText: "User does not exist".to_string(),
                         errorCode: 0,
                     };
                     send_message(
@@ -878,7 +878,61 @@ pub fn execute_authorized_command(
                 &get_room_user_list(&token_info.roomId, lists.1.clone()),
             );
         }
-        AuthorizedCommand::writeAnswer { answer } => (),
+        AuthorizedCommand::writeAnswer { answer } => {
+            info!(
+                "Answer message from: {}",
+                &connection_id.lock().unwrap().clone()
+            );
+
+            // Return error if user doesn't exist
+            match get_list_element(&connection_id.lock().unwrap().clone(), lists.1.clone()) {
+                Some(_) => (),
+                None => {
+                    let response = Response::errorResponse {
+                        errorText: "User does not exist".to_string(),
+                        errorCode: 0,
+                    };
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
+                    return;
+                }
+            }
+
+            // Return error if game doesn't exist
+            if !lists.3.lock().unwrap().contains_key(&token_info.roomId) {
+                let response = Response::errorResponse {
+                    errorText: "Game is not started".to_string(),
+                    errorCode: 0,
+                };
+                send_message(
+                    response,
+                    lists.0.clone(),
+                    &connection_id.lock().unwrap().clone(),
+                );
+                return;
+            }
+
+            let answer = GameCommand {
+                user_id: token_info.id.to_string(),
+                answer: answer,
+            };
+            lists
+                .3
+                .lock()
+                .unwrap()
+                .get(&token_info.roomId)
+                .unwrap()
+                .unbounded_send(Message::Text(serde_json::to_string(&answer).unwrap()))
+                .unwrap();
+
+            info!(
+                "Successful answer message from: {}",
+                &connection_id.lock().unwrap().clone()
+            );
+        }
         AuthorizedCommand::changeUsername { newName } => (),
         AuthorizedCommand::changeAvatar { newAvatarPath } => (),
     }
