@@ -720,7 +720,11 @@ pub fn execute_authorized_command(
                         errorText: "User has been removed".to_string(),
                         errorCode: 2,
                     };
-                    send_message(response, lists.0.clone(), &token_info.id);
+                    send_message(
+                        response,
+                        lists.0.clone(),
+                        &connection_id.lock().unwrap().clone(),
+                    );
                     println!("Returned RECONNECT user no longer exists 2.3");
                     return;
                 }
