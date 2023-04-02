@@ -92,6 +92,7 @@ pub async fn handle_connection(lists: Lists, raw_stream: TcpStream, addr: Socket
                 );
             }
         }
+        println!("HANDLED COMMAND");
 
         future::ok(())
     });
