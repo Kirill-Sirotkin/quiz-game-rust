@@ -794,7 +794,10 @@ pub fn execute_authorized_command(
             }
 
             // Return error if user is not host
-            if !token_info.isHost {
+            let is_user_host = get_list_element(&token_info.id, lists.1.clone())
+                .unwrap()
+                .isHost;
+            if !is_user_host {
                 let response = Response::errorResponse {
                     errorText: "Only host can start game".to_string(),
                     errorCode: 0,
@@ -806,6 +809,7 @@ pub fn execute_authorized_command(
                 );
                 return;
             }
+            drop(is_user_host);
 
             // Broadcast to the room that the game has started
             let broadcast_response = Response::startGame {};
