@@ -937,8 +937,12 @@ pub fn execute_authorized_command(
                 &connection_id.lock().unwrap().clone()
             );
         }
-        AuthorizedCommand::changeUsername { newName } => (),
-        AuthorizedCommand::changeAvatar { newAvatarPath } => (),
+        AuthorizedCommand::changeUsername { newName } => {
+            info!("{}", newName);
+        }
+        AuthorizedCommand::changeAvatar { newAvatarPath } => {
+            info!("{}", newAvatarPath);
+        }
     }
 }
 
