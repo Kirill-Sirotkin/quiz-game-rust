@@ -43,13 +43,13 @@ async fn main() -> Result<(), IoError> {
     let games = GameList::new(Mutex::new(HashMap::new()));
     let user_timeouts = UserTimeoutList::new(Mutex::new(HashMap::new()));
 
-    // let der: [u8; 4] = [1, 2, 3, 4];
-    // let cert = Identity::from_pkcs12(&der, "quiz").expect("can't certify");
-    // let tls_acceptor = tokio_native_tls::TlsAcceptor::from(
-    //     native_tls::TlsAcceptor::builder(cert)
-    //         .build()
-    //         .expect("can't make tls acceptor"),
-    // );
+    let der = include_bytes!("identity.p12");
+    let cert = Identity::from_pkcs12(der, "mypass").expect("can't certify");
+    let tls_acceptor = tokio_native_tls::TlsAcceptor::from(
+        native_tls::TlsAcceptor::builder(cert)
+            .build()
+            .expect("can't make tls acceptor"),
+    );
 
     while let Ok((stream, addr)) = listener.accept().await {
         tokio::spawn(handle_connection(
@@ -62,7 +62,7 @@ async fn main() -> Result<(), IoError> {
             ),
             stream,
             addr,
-            // tls_acceptor.clone(),
+            tls_acceptor.clone(),
         ));
     }
 
