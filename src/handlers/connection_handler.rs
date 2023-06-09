@@ -37,15 +37,15 @@ pub async fn handle_connection(
     lists: Lists,
     raw_stream: TcpStream,
     addr: SocketAddr,
-    acceptor: TlsAcceptor,
+    // acceptor: TlsAcceptor,
 ) {
     info!("Incoming TCP connection from: {}", &addr);
 
-    let tls_stream = match acceptor.accept(raw_stream).await {
-        Ok(res) => res,
-        Err(_) => return,
-    };
-    let ws_stream = match tokio_tungstenite::accept_async(tls_stream).await {
+    // let tls_stream = match acceptor.accept(raw_stream).await {
+    //     Ok(res) => res,
+    //     Err(_) => return,
+    // };
+    let ws_stream = match tokio_tungstenite::accept_async(raw_stream).await {
         Ok(stream) => stream,
         Err(error) => {
             warn!("Handshake with {} error: {}", addr, error);
